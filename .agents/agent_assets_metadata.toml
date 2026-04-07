@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "qDoP_gfbuAxDnPIV3JWnQ"
+uri = "file://GhostClient-source.tar.gz"
+type = "unspecified"
+title = "GhostClient – Sourcecode (mit GhostEmbed Plugin)"

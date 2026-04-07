@@ -1,0 +1,14 @@
+GhostClient starten
+1. Abhängigkeiten installieren (nur einmal nötig):
+
+bun install
+
+2. Bauen:
+
+bun run build
+
+3. In Discord injizieren:
+
+bun scripts/inject.js
+
+4. Discord neu starten — fertig!
