@@ -98,10 +98,12 @@ export default function FloatingWindow({id, title, resizable, children, classNam
 
 
     const onDragStart = useCallback((e: MouseEvent) => {
+        e.preventDefault();
         const div = window.current!;
+        const rect = div.getBoundingClientRect();
 
-        positioning.current.offset.x = e.clientX - div.offsetLeft;
-        positioning.current.offset.y = e.clientY - div.offsetTop;
+        positioning.current.offset.x = e.clientX - rect.left;
+        positioning.current.offset.y = e.clientY - rect.top;
 
         positioning.current.isDragging = true;
     }, [window]);

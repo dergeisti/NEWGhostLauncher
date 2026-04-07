@@ -8,6 +8,11 @@
   }
 }
 
+bd-body,
+#floating-windows-layer {
+  pointer-events: none;
+}
+
 .floating-window {
   animation: open-window 200ms ease;
   min-width: 200px;
@@ -19,6 +24,7 @@
   position: fixed;
   z-index: 1002;
   box-sizing: border-box;
+  pointer-events: all;
 }
 
 .floating-window.modal-open {
@@ -42,6 +48,12 @@
   background: var(
     --background-base-lowest
   ); /* #2F3129background-color: #202225; */
+  cursor: grab;
+  user-select: none;
+}
+
+.floating-window-titlebar:active {
+  cursor: grabbing;
 }
 
 .floating-window-content {

@@ -8,14 +8,17 @@ const {useState, useCallback, useEffect} = React;
 export default function FloatingWindowContainer() {
     const [windows, setWindows] = useState<FloatingWindowProps[]>([]);
     const open = useCallback((window: FloatingWindowProps) => {
-        setWindows(wins => [...wins, window]);
+        setWindows(wins => {
+            if (wins.some(w => w.id === window.id)) return wins;
+            return [...wins, window];
+        });
     }, []);
     const close = useCallback((id: string) => {
-        setWindows(windows.filter(w => {
+        setWindows(wins => wins.filter(w => {
             if (w.id === id && w.onClose) w.onClose();
             return w.id !== id;
         }));
-    }, [windows]);
+    }, []);
 
     useEffect(() => {
         Events.on("open-window", open);

@@ -691,5 +691,253 @@ class GhostEmbed {
 }
 
 module.exports = GhostEmbed;`
+    },
+    {
+        filename: "GhostWebhDeleter.plugin.js",
+        content: `/**
+   * @name GhostWebhDeleter
+   * @author GhostClient
+   * @description Opens a draggable window to permanently delete a Discord Webhook by URL.
+   * @version 1.0.0
+   * @source https://github.com/ghostclient
+   */
+
+  const _R = BdApi.React;
+  const _e = _R.createElement.bind(_R);
+  const { useState: _useState, useEffect: _useEffect, useRef: _useRef, useCallback: _useCallback } = _R;
+
+  function GhostWebhDeleterUI({ onClose }) {
+      const [url, setUrl] = _useState("");
+      const [status, setStatus] = _useState("idle");
+      const [errMsg, setErrMsg] = _useState("");
+      const [pos, setPos] = _useState({ x: Math.max(0, window.innerWidth / 2 - 220), y: Math.max(0, window.innerHeight / 2 - 180) });
+      const dragging = _useRef(false);
+      const offset = _useRef({ x: 0, y: 0 });
+      const winRef = _useRef(null);
+
+      _useEffect(() => {
+          const onMove = (ev) => {
+              if (!dragging.current) return;
+              setPos({ x: ev.clientX - offset.current.x, y: ev.clientY - offset.current.y });
+          };
+          const onUp = () => { dragging.current = false; };
+          document.addEventListener("mousemove", onMove, true);
+          document.addEventListener("mouseup", onUp);
+          return () => {
+              document.removeEventListener("mousemove", onMove, true);
+              document.removeEventListener("mouseup", onUp);
+          };
+      }, []);
+
+      const startDrag = _useCallback((ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          const rect = winRef.current.getBoundingClientRect();
+          offset.current = { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
+          dragging.current = true;
+      }, []);
+
+      const isValid = url.trim().startsWith("https://discord.com/api/webhooks/") || url.trim().startsWith("https://discordapp.com/api/webhooks/");
+
+      const doDelete = _useCallback(async () => {
+          if (!isValid || status === "loading") return;
+          setStatus("loading");
+          setErrMsg("");
+          try {
+              const res = await BdApi.Net.fetch(url.trim(), { method: "DELETE" });
+              if (res.status === 204) {
+                  setStatus("success");
+              } else {
+                  const txt = await res.text().catch(() => "");
+                  setStatus("error");
+                  setErrMsg("Fehler " + res.status + (txt ? ": " + txt : ""));
+              }
+          } catch (err) {
+              setStatus("error");
+              setErrMsg(err && err.message ? err.message : "Netzwerkfehler");
+          }
+      }, [url, isValid, status]);
+
+      const reset = () => { setUrl(""); setStatus("idle"); setErrMsg(""); };
+
+      const inp = {
+          width: "100%", background: "var(--input-background,#1e1f22)",
+          border: "1px solid " + (url && !isValid ? "#ed4245" : "var(--input-border,#3f4147)"),
+          borderRadius: "6px", color: "var(--text-normal,#dcddde)", fontSize: "14px",
+          padding: "10px 12px", outline: "none", boxSizing: "border-box", fontFamily: "inherit",
+          marginBottom: "6px",
+      };
+
+      return _e("div", {
+          ref: winRef,
+          style: {
+              position: "fixed", left: pos.x + "px", top: pos.y + "px",
+              width: "440px", background: "var(--background-primary,#313338)",
+              borderRadius: "10px", boxShadow: "0 8px 40px rgba(0,0,0,0.65)",
+              zIndex: 9999, overflow: "hidden", pointerEvents: "all",
+          }
+      },
+          _e("div", {
+              onMouseDown: startDrag,
+              style: {
+                  display: "flex", alignItems: "center", padding: "0 12px",
+                  height: "44px", background: "var(--background-secondary,#2b2d31)",
+                  borderBottom: "1px solid var(--background-modifier-accent,#3f4147)",
+                  cursor: "grab", userSelect: "none", flexShrink: 0,
+              }
+          },
+              _e("span", { style: { width: "8px", height: "8px", borderRadius: "50%", background: "#ed4245", display: "inline-block", marginRight: "10px", flexShrink: 0 } }),
+              _e("span", { style: { fontWeight: 700, fontSize: "14px", color: "var(--header-primary)", flex: 1 } }, "GhostWebhDeleter"),
+              _e("div", {
+                  onMouseDown: (ev) => ev.stopPropagation(),
+                  onClick: onClose,
+                  style: {
+                      width: "28px", height: "28px", display: "flex", alignItems: "center",
+                      justifyContent: "center", borderRadius: "4px", cursor: "pointer",
+                      color: "var(--text-muted)", fontSize: "20px", lineHeight: 1,
+                  }
+              }, "\u00d7")
+          ),
+          _e("div", { style: { padding: "20px" } },
+              status === "success"
+                  ? _e("div", { style: { textAlign: "center", padding: "16px 0" } },
+                      _e("div", { style: { fontSize: "42px", marginBottom: "12px" } }, "\u2705"),
+                      _e("div", { style: { fontSize: "15px", fontWeight: 700, color: "#3ba55d", marginBottom: "6px" } }, "Webhook gel\u00f6scht!"),
+                      _e("div", { style: { fontSize: "13px", color: "var(--text-muted)", marginBottom: "20px" } }, "Der Webhook ist permanent entfernt."),
+                      _e("button", {
+                          onClick: reset,
+                          style: { width: "100%", padding: "10px", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "14px", fontWeight: 600, background: "var(--background-modifier-hover,#3f4147)", color: "var(--text-normal)" }
+                      }, "Weiteren l\u00f6schen")
+                  )
+                  : _e("div", null,
+                      _e("div", { style: { fontSize: "12px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--header-secondary,#b9bbbe)", marginBottom: "8px" } }, "Webhook-URL"),
+                      _e("input", {
+                          style: inp,
+                          value: url,
+                          placeholder: "https://discord.com/api/webhooks/...",
+                          onChange: (ev) => { setUrl(ev.target.value); if (status === "error") setStatus("idle"); },
+                          disabled: status === "loading",
+                          spellCheck: false,
+                      }),
+                      url && !isValid
+                          ? _e("div", { style: { fontSize: "12px", color: "#ed4245", marginBottom: "12px" } }, "Ung\u00fcltige Webhook-URL")
+                          : _e("div", { style: { marginBottom: "12px" } }),
+                      _e("button", {
+                          onClick: doDelete,
+                          disabled: !isValid || status === "loading",
+                          style: {
+                              width: "100%", padding: "11px", border: "none", borderRadius: "6px",
+                              fontSize: "14px", fontWeight: 700, color: "#fff",
+                              background: status === "error" ? "#a12d2f" : "#ed4245",
+                              opacity: (!isValid || status === "loading") ? 0.5 : 1,
+                              cursor: (!isValid || status === "loading") ? "not-allowed" : "pointer",
+                              transition: "background 0.2s, opacity 0.2s",
+                          }
+                      },
+                          status === "loading"
+                              ? "\u23f3 Wird gel\u00f6scht..."
+                              : status === "error"
+                                  ? "\u21ba Erneut versuchen"
+                                  : "\uD83D\uDDD1\uFE0F  Webhook l\u00f6schen"
+                      ),
+                      status === "error" && errMsg
+                          ? _e("div", {
+                              style: { marginTop: "10px", fontSize: "12px", color: "#ed4245", wordBreak: "break-word", padding: "8px 10px", background: "rgba(237,66,69,0.1)", borderRadius: "4px" }
+                            }, errMsg)
+                          : null,
+                      _e("div", {
+                          style: { marginTop: "16px", padding: "10px 12px", background: "var(--background-secondary,#2b2d31)", borderRadius: "6px", fontSize: "12px", color: "var(--text-muted)", lineHeight: "1.5", display: "flex", gap: "8px", alignItems: "flex-start" }
+                      },
+                          _e("span", null, "\u26a0\ufe0f"),
+                          _e("span", null, "Gel\u00f6schte Webhooks k\u00f6nnen nicht wiederhergestellt werden.")
+                      )
+                  )
+          )
+      );
+  }
+
+  class GhostWebhDeleter {
+      constructor() {
+          this._observer = null;
+          this._div = null;
+          this._root = null;
+      }
+
+      start() {
+          this._addSidebarButton();
+      }
+
+      stop() {
+          if (this._observer) { this._observer.disconnect(); this._observer = null; }
+          document.querySelector(".gc-webhdeleter-sidebar-wrapper")?.remove();
+          this._closeWindow();
+      }
+
+      _openWindow() {
+          if (this._div) return;
+          const div = document.createElement("div");
+          div.id = "gc-webhdeleter-root";
+          div.style.cssText = "position:fixed;inset:0;z-index:9998;pointer-events:none;";
+          document.body.appendChild(div);
+          this._div = div;
+          const root = BdApi.ReactDOM.createRoot(div);
+          this._root = root;
+          root.render(_e(GhostWebhDeleterUI, { onClose: () => this._closeWindow() }));
+      }
+
+      _closeWindow() {
+          if (this._root) { this._root.unmount(); this._root = null; }
+          if (this._div) { this._div.remove(); this._div = null; }
+      }
+
+      _addSidebarButton() {
+          const tryInsert = () => {
+              try {
+                  const keys = BdApi.Webpack.getByKeys("unreadMentionsIndicatorBottom");
+                  if (!keys) return;
+                  const container = document.querySelector("." + keys.itemsContainer);
+                  if (!container || container.querySelector(".gc-webhdeleter-sidebar-btn")) return;
+
+                  const wk = BdApi.Webpack.getByKeys;
+                  const wrapperCls = wk("listItemWrapper") ? wk("listItemWrapper").listItemWrapper : "";
+                  const btnWrapCls = wk("lowerBadge") ? wk("lowerBadge").wrapper : "";
+                  const circleBtnCls = wk("circleIcon") ? wk("circleIcon").circleIconButton : "";
+
+                  const outerWrap = document.createElement("div");
+                  outerWrap.className = (wrapperCls ? wrapperCls + " " : "") + "gc-webhdeleter-sidebar-wrapper";
+                  outerWrap.style.cssText = "display:flex;justify-content:center;";
+
+                  const btn = document.createElement("div");
+                  btn.className = (btnWrapCls ? btnWrapCls + " " : "") + "gc-webhdeleter-sidebar-btn";
+                  btn.style.cssText = "cursor:pointer;";
+
+                  const inner = document.createElement("div");
+                  inner.className = circleBtnCls || "";
+                  inner.setAttribute("aria-label", "GhostWebhDeleter");
+                  inner.setAttribute("role", "button");
+                  inner.style.cssText = "display:flex;align-items:center;justify-content:center;width:40px;height:40px;background:#ed4245;border-radius:50%;";
+                  inner.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+
+                  btn.appendChild(inner);
+                  btn.onclick = () => this._openWindow();
+                  outerWrap.appendChild(btn);
+
+                  try { BdApi.UI.createTooltip(btn, "GhostWebhDeleter", { style: "primary", side: "right" }); } catch(e) {}
+
+                  const separator = container.querySelector('[aria-label="Servers"]');
+                  if (separator && separator.parentElement) separator.parentElement.insertBefore(outerWrap, separator);
+                  else container.appendChild(outerWrap);
+              } catch (err) {
+                  console.warn("[GhostWebhDeleter] Sidebar-Fehler:", err);
+              }
+          };
+
+          tryInsert();
+          this._observer = new MutationObserver(tryInsert);
+          this._observer.observe(document.body, { childList: true, subtree: true });
+      }
+  }
+
+  module.exports = GhostWebhDeleter;`
     }
 ];
