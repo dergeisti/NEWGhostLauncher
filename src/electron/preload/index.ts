@@ -11,7 +11,7 @@ DiscordNativePatch.init();
 
 let hasInitialized = false;
 contextBridge.exposeInMainWorld("process", newProcess);
-contextBridge.exposeInMainWorld("BetterDiscordPreload", () => {
+contextBridge.exposeInMainWorld("GhostClientPreload", () => {
     if (hasInitialized) return null;
     hasInitialized = true;
     return BdApi;

@@ -1,0 +1,61 @@
+🔄 Standard-Workflow (jedes Mal)
+
+Gehe in deinen Projektordner im Terminal:
+
+cd /pfad/zu/deinem/projekt
+
+Dann:
+
+1. Änderungen hinzufügen
+git add .
+2. Commit machen (Beschreibung deiner Änderung)
+git commit -m "Update: Beschreibung was du geändert hast"
+3. Hochladen (Push)
+git push
+
+👉 Fertig 🎉 Deine Änderungen sind jetzt online
+
+🧠 Merksatz
+
+👉 add → commit → push
+
+⚠️ Häufige Fehler
+❌ „nothing to commit“
+
+→ Du hast nichts geändert oder nichts gespeichert
+
+❌ Wieder Login nötig
+
+→ Dann einfach wieder:
+
+Username: dein Name
+Passwort: Token (nicht echtes Passwort!)
+💡 Tipp (spart Zeit)
+
+Wenn du oft pushst:
+
+git add . && git commit -m "update" && git push
+
+→ alles in einem Befehl 🚀
+
+
+
+
+
+1. In dein Projekt gehen
+cd /pfad/zu/deinem/projekt
+2. Alle Änderungen erfassen (inkl. Löschungen & Umbenennungen)
+git add -A
+3. Commit machen
+git commit -m "Projekt aktualisiert (Dateien geändert/gelöscht)"
+4. Auf GitHub hochladen
+git push
+🧨 Falls es Probleme gibt (z. B. Konflikte): Hard Reset + Force Push
+
+Wenn dein GitHub-Repo komplett überschrieben werden soll:
+
+git add -A
+git commit -m "komplett neuer Stand"
+git push --force
+
+👉 --force zwingt GitHub, exakt deinen lokalen Stand zu übernehmen.

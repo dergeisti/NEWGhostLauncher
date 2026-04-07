@@ -3,7 +3,7 @@ import {ipcMain as ipc, BrowserWindow, app, dialog, systemPreferences, shell, ty
 
 import * as IPCEvents from "@common/constants/ipcevents";
 import Editor from "./editor";
-import BetterDiscord from "./betterdiscord";
+import GhostClient from "./ghostclient";
 
 const getPath = (event: IpcMainEvent, pathReq: string) => {
     let returnPath;
@@ -174,10 +174,10 @@ const getSettings = (event: IpcMainEvent) => {
 };
 
 const getAllowPreloadOverride = (_: IpcMainInvokeEvent) => {
-    return BetterDiscord.clientModCompatibility.allowPreloadOverride();
+    return GhostClient.clientModCompatibility.allowPreloadOverride();
 };
 const setAllowPreloadOverride = (_: IpcMainInvokeEvent, value: boolean) => {
-    return BetterDiscord.clientModCompatibility.setAllowPreloadOverride(value);
+    return GhostClient.clientModCompatibility.setAllowPreloadOverride(value);
 };
 
 

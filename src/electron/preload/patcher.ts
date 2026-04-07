@@ -82,7 +82,7 @@ export default function () {
                                 }
 
                                 const definers: PropertyDescriptorMap = {
-                                    [Symbol.for("BetterDiscord.Polyfilled.class")]: {
+                                    [Symbol.for("GhostClient.Polyfilled.class")]: {
                                         value: true
                                     }
                                 };
@@ -118,7 +118,7 @@ export default function () {
                         return newValue;
                     }
 
-                    const sym = Symbol.for("BetterDiscord.ModulesTest");
+                    const sym = Symbol.for("GhostClient.ModulesTest");
 
                     const fakeModule = require.m[sym] = () => {};
                     const isModulesProxied = fakeModule !== require.m[sym];

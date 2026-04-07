@@ -1,12 +1,12 @@
 import electron, {type BrowserWindowConstructorOptions} from "electron";
 import path from "path";
 
-import BetterDiscord from "./betterdiscord";
+import GhostClient from "./ghostclient";
 import Editor from "./editor";
 import * as IPCEvents from "@common/constants/ipcevents";
 import {isProxy} from "util/types";
 
-// const EDITOR_URL_REGEX = /^betterdiscord:\/\/editor\/(?:custom-css|(theme|plugin)\/([^/]+))\/?/;
+// const EDITOR_URL_REGEX = /^ghostclient:\/\/editor\/(?:custom-css|(theme|plugin)\/([^/]+))\/?/;
 
 function maybeHasOtherClientMod() {
     if (isProxy(electron) || isProxy(electron.BrowserWindow)) return true;
@@ -29,7 +29,7 @@ class BrowserWindow extends electron.BrowserWindow {
     constructor(options: BrowserWindowConstructorOptions) {
         if (!options || !options.webPreferences || !options.webPreferences.preload || !options.title) return super(options);
 
-        if (maybeHasOtherClientMod() && BetterDiscord.clientModCompatibility.shouldShow()) {
+        if (maybeHasOtherClientMod() && GhostClient.clientModCompatibility.shouldShow()) {
             // Not i18n but the i18n system doesn't exist here
             electron.dialog.showMessageBox({
                 type: "warning",
@@ -40,7 +40,7 @@ class BrowserWindow extends electron.BrowserWindow {
                 defaultId: 0
             }).then(result => {
                 if (result.checkboxChecked) {
-                    BetterDiscord.clientModCompatibility.stopShowing();
+                    GhostClient.clientModCompatibility.stopShowing();
                 }
             });
         }
@@ -52,29 +52,29 @@ class BrowserWindow extends electron.BrowserWindow {
         Object.defineProperty(options.webPreferences, "preload", {
             get: () => preload,
             set(newPreload) {
-                if (BetterDiscord.clientModCompatibility.allowPreloadOverride()) {
+                if (GhostClient.clientModCompatibility.allowPreloadOverride()) {
                     preload = newPreload;
                 }
             }
         });
 
         // Don't allow just "truthy" values
-        const shouldBeTransparent = BetterDiscord.getSetting("window", "transparency");
+        const shouldBeTransparent = GhostClient.getSetting("window", "transparency");
         if (typeof (shouldBeTransparent) === "boolean" && shouldBeTransparent) {
             options.transparent = true;
             options.backgroundColor = "#00000000";
         }
 
-        const inAppTrafficLights = Boolean(BetterDiscord.getSetting("window", "inAppTrafficLights") ?? false);
+        const inAppTrafficLights = Boolean(GhostClient.getSetting("window", "inAppTrafficLights") ?? false);
 
-        process.env.BETTERDISCORD_NATIVE_FRAME = options.frame = Boolean(BetterDiscord.getSetting("window", "frame") ?? options.frame ?? true);
-        process.env.BETTERDISCORD_IN_APP_TRAFFIC_LIGHTS = inAppTrafficLights;
+        process.env.GHOSTCLIENT_NATIVE_FRAME = options.frame = Boolean(GhostClient.getSetting("window", "frame") ?? options.frame ?? true);
+        process.env.GHOSTCLIENT_IN_APP_TRAFFIC_LIGHTS = inAppTrafficLights;
 
         if (inAppTrafficLights) {
             delete options.titleBarStyle;
         }
 
-        const removeMinimumSize = Boolean(BetterDiscord.getSetting("window", "removeMinimumSize") ?? false);
+        const removeMinimumSize = Boolean(GhostClient.getSetting("window", "removeMinimumSize") ?? false);
         if (removeMinimumSize) {
             options.minWidth = 0;
             options.minHeight = 0;
@@ -85,7 +85,7 @@ class BrowserWindow extends electron.BrowserWindow {
             this.setMinimumSize = () => {};
         }
         this.__originalPreload = originalPreload;
-        BetterDiscord.setup(this);
+        GhostClient.setup(this);
         Editor.initialize(this);
 
         // eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -118,7 +118,7 @@ class BrowserWindow extends electron.BrowserWindow {
                     // }
 
                     // Just like chat make it only be on this client
-                    if (details.url.startsWith("betterdiscord://")) {
+                    if (details.url.startsWith("ghostclient://")) {
                         self.webContents.send(IPCEvents.HANDLE_PROTOCOL, details.url);
                         return {action: "deny"};
                     }
