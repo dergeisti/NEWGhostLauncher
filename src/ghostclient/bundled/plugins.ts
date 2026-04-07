@@ -177,15 +177,15 @@ module.exports = GhostCustomStatus;`
         content: `/**
  * @name GhostEmbed
  * @author GhostClient
- * @description A full-featured Discord Embed Builder. Click the icon in the server sidebar, in chat next to GIF, or open it from GhostClient settings.
- * @version 1.0.0
+ * @description A full-featured Discord Embed Builder with Webhook support. Click the icon in the chat bar or server toolbar.
+ * @version 1.1.0
  * @source https://github.com/ghostclient
  */
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 const R = BdApi.React;
 const e = R.createElement.bind(R);
-const { useState, useCallback, useRef } = R;
+const { useState, useCallback, useRef, useEffect } = R;
 
 const S = {
     input: {
@@ -223,6 +223,46 @@ function Field({ label, children }) {
         e("label", { style: S.label }, label),
         children
     );
+}
+
+// ─── Markdown renderer ─────────────────────────────────────────────────────
+function renderMd(text) {
+    if (!text) return null;
+    const BT = String.fromCharCode(96);
+const rx = new RegExp(
+        "([*][*][*].+?[*][*][*]" +
+        "|[*][*].+?[*][*]" +
+        "|__.+?__" +
+        "|[~][~].+?[~][~]" +
+        "|[*].+?[*]" +
+        "|_.+?_" +
+        "|" + BT + "[^" + BT + "]+" + BT + ")", "g");
+    const lines = String(text).split("\\n");
+    const out = [];
+    for (let li = 0; li < lines.length; li++) {
+        if (li > 0) out.push(e("br", { key: "br" + li }));
+        const s = lines[li];
+        rx.lastIndex = 0;
+        let last = 0, m, pk = 0;
+        const parts = [];
+        while ((m = rx.exec(s)) !== null) {
+            if (m.index > last) parts.push(s.slice(last, m.index));
+            const tok = m[0];
+const c2 = tok.slice(0, 2), c3 = tok.slice(0, 3);
+            const inner = c3 === "***" ? tok.slice(3, -3)
+                : (c2 === "**" || c2 === "__" || c2 === "~~") ? tok.slice(2, -2)
+                : tok.slice(1, -1);
+if (c3 === "***") parts.push(e("strong", { key: pk++ }, e("em", null, inner)));
+            else if (c2 === "**") parts.push(e("strong", { key: pk++ }, inner));
+            else if (c2 === "__") parts.push(e("u", { key: pk++ }, inner));
+            else if (c2 === "~~") parts.push(e("s", { key: pk++ }, inner));
+            else if (tok[0] === "*" || tok[0] === "_") parts.push(e("em", { key: pk++ }, inner));
+            last = m.index + tok.length;
+        }
+        if (last < s.length) parts.push(s.slice(last));
+        out.push(...parts);
+    }
+    return out.length ? out : null;
 }
 
 // ─── Embed Preview ─────────────────────────────────────────────────────────
@@ -269,13 +309,13 @@ function EmbedPreview({ embed }) {
             e("span", { style: { fontSize: "13px", fontWeight: 600, color: "var(--header-primary,#f2f3f5)" } }, embed.author.name)
         ),
         hasTitle && e("div", { style: { fontSize: "15px", fontWeight: 700, color: embed.url ? "#00b0f4" : "var(--header-primary,#f2f3f5)", marginBottom: "6px" } }, embed.title),
-        hasDesc && e("div", { style: { fontSize: "13px", color: "var(--text-normal,#dcddde)", lineHeight: "1.5", marginBottom: "8px", whiteSpace: "pre-wrap", paddingRight: hasThumbnail ? "88px" : "0" } }, embed.description),
+        hasDesc && e("div", { style: { fontSize: "13px", color: "var(--text-normal,#dcddde)", lineHeight: "1.5", marginBottom: "8px", paddingRight: hasThumbnail ? "88px" : "0" } }, renderMd(embed.description)),
         hasFields && groups.map((grp, gi) => e("div", {
             key: gi,
             style: { display: "grid", gridTemplateColumns: grp[0].inline ? ("repeat(" + grp.length + ",1fr)") : "1fr", gap: "8px", marginBottom: "8px" }
         }, grp.map(f => e("div", { key: f.id },
-            e("div", { style: { fontSize: "12px", fontWeight: 700, color: "var(--header-primary,#f2f3f5)", marginBottom: "2px" } }, f.name || "\\u200b"),
-            e("div", { style: { fontSize: "13px", color: "var(--text-normal,#dcddde)", whiteSpace: "pre-wrap" } }, f.value || "\\u200b")
+            e("div", { style: { fontSize: "12px", fontWeight: 700, color: "var(--header-primary,#f2f3f5)", marginBottom: "2px" } }, renderMd(f.name) || "\\u200b"),
+            e("div", { style: { fontSize: "13px", color: "var(--text-normal,#dcddde)" } }, renderMd(f.value) || "\\u200b")
         )))),
         hasImage && e("img", { src: embed.image, style: { width: "100%", borderRadius: "4px", marginBottom: "8px", display: "block", maxHeight: "300px", objectFit: "contain" }, onError: ev => { ev.target.style.display = "none"; } }),
         hasFooter && e("div", { style: { display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" } },
@@ -315,14 +355,47 @@ function GhostEmbedApp({ onClose }) {
         fields: []
     });
     const [webhookUrl, setWebhookUrl] = useState("");
+    const [webhookInfo, setWebhookInfo] = useState(null); // { name, avatarUrl }
+    const [webhookLoading, setWebhookLoading] = useState(false);
+    const [webhookError, setWebhookError] = useState("");
     const [copied, setCopied] = useState(false);
     const [cleared, setCleared] = useState(false);
     const [sendStatus, setSendStatus] = useState("idle");
     const [sendError, setSendError] = useState("");
     const ctr = useRef(0);
+    const debounceRef = useRef(null);
 
     const patch = useCallback((key, val) => setEmbed(p => ({ ...p, [key]: val })), []);
     const patchNested = useCallback((key, val) => setEmbed(p => ({ ...p, [key]: { ...p[key], ...val } })), []);
+
+    // Fetch webhook info when URL changes (debounced)
+    useEffect(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        const url = webhookUrl.trim();
+        if (!url) { setWebhookInfo(null); setWebhookError(""); return; }
+        const isValid = url.startsWith("https://discord.com/api/webhooks/") || url.startsWith("https://discordapp.com/api/webhooks/");
+        if (!isValid) { setWebhookInfo(null); setWebhookError("Ung\u00fcltige Webhook-URL"); return; }
+        setWebhookError("");
+        debounceRef.current = setTimeout(async () => {
+            setWebhookLoading(true);
+            try {
+                const res = await BdApi.Net.fetch(url);
+                if (!res.ok) throw new Error("Status " + res.status);
+                const data = await res.json();
+                const avatarUrl = data.avatar
+                    ? "https://cdn.discordapp.com/avatars/" + data.id + "/" + data.avatar + ".png?size=128"
+                    : "https://cdn.discordapp.com/embed/avatars/0.png";
+                setWebhookInfo({ name: data.name || "Webhook", avatarUrl });
+                setWebhookError("");
+            } catch {
+                setWebhookInfo(null);
+                setWebhookError("Info konnte nicht geladen werden \u2014 Senden trotzdem m\u00f6glich");
+            } finally {
+                setWebhookLoading(false);
+            }
+        }, 600);
+        return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    }, [webhookUrl]);
 
     const addField = useCallback(() => {
         const id = ++ctr.current;
@@ -351,22 +424,30 @@ function GhostEmbedApp({ onClose }) {
         if (!url) return;
         if (!url.startsWith("https://discord.com/api/webhooks/") && !url.startsWith("https://discordapp.com/api/webhooks/")) {
             setSendStatus("error");
-            setSendError("Ung\\u00fcltige Webhook-URL.");
+            setSendError("Ung\u00fcltige Webhook-URL.");
             setTimeout(() => setSendStatus("idle"), 4000);
             return;
         }
         setSendStatus("sending"); setSendError("");
         try {
-            const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(buildPayload()) });
-            if (res.ok) { setSendStatus("ok"); setTimeout(() => setSendStatus("idle"), 3000); }
-            else {
+            const res = await BdApi.Net.fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(buildPayload())
+            });
+            if (res.ok) {
+                setSendStatus("ok");
+                setTimeout(() => setSendStatus("idle"), 3000);
+            } else {
                 const txt = await res.text();
-                setSendStatus("error"); setSendError("Fehler " + res.status + ": " + txt);
+                setSendStatus("error");
+                setSendError("Fehler " + res.status + ": " + txt);
                 setTimeout(() => setSendStatus("idle"), 5000);
             }
         } catch (err) {
-            setSendStatus("error"); setSendError(err?.message || "Netzwerkfehler");
-            setTimeout(() => setSendStatus("idle"), 4000);
+            setSendStatus("error");
+            setSendError(err?.message || "Netzwerkfehler");
+            setTimeout(() => setSendStatus("idle"), 5000);
         }
     }, [webhookUrl, buildPayload]);
 
@@ -381,6 +462,10 @@ function GhostEmbedApp({ onClose }) {
     }, []);
 
     const btnBase = { border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "13px", fontWeight: 600, padding: "10px 14px", display: "flex", alignItems: "center", gap: "6px" };
+
+    // Bot display values for preview
+    const botName = webhookInfo ? webhookInfo.name : "GhostClient Bot";
+    const botAvatar = webhookInfo ? webhookInfo.avatarUrl : null;
 
     return e("div", {
         className: "gc-embed-overlay",
@@ -408,6 +493,51 @@ function GhostEmbedApp({ onClose }) {
                 e("div", {
                     style: { width: "370px", minWidth: "300px", flexShrink: 0, overflowY: "auto", padding: "14px", borderRight: "1px solid var(--background-modifier-accent,#3f4147)" }
                 },
+                    // ── Webhook section (TOP) ──
+                    e("div", { style: { background: "var(--background-secondary,#2b2d31)", borderRadius: "8px", padding: "14px", marginBottom: "10px", border: "1px solid var(--background-modifier-accent,#3f4147)" } },
+                        e("div", { style: { fontSize: "13px", fontWeight: 700, color: "var(--header-primary,#f2f3f5)", marginBottom: "10px", display: "flex", alignItems: "center", gap: "8px" } },
+                            e("span", { style: { fontSize: "16px" } }, "\\uD83D\\uDD17"),
+                            "Webhook"
+                        ),
+                        e("label", { style: S.label }, "Webhook-URL"),
+                        e("input", {
+                            style: { ...S.input, marginBottom: "8px" },
+                            value: webhookUrl,
+                            placeholder: "https://discord.com/api/webhooks/...",
+                            onChange: ev => setWebhookUrl(ev.target.value)
+                        }),
+                        // Bot info display
+                        webhookLoading && e("div", { style: { fontSize: "12px", color: "var(--text-muted)", marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" } },
+                            e("span", null, "\\u23F3"), " Webhook wird geladen..."
+                        ),
+                        webhookInfo && !webhookLoading && e("div", {
+                            style: { display: "flex", alignItems: "center", gap: "10px", padding: "8px 10px", background: "var(--background-tertiary,#1e1f22)", borderRadius: "6px", marginBottom: "8px" }
+                        },
+                            e("img", {
+                                src: webhookInfo.avatarUrl,
+                                style: { width: "32px", height: "32px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 },
+                                onError: ev => { ev.target.style.display = "none"; }
+                            }),
+                            e("div", null,
+                                e("div", { style: { fontSize: "13px", fontWeight: 700, color: "var(--header-primary,#f2f3f5)" } }, webhookInfo.name),
+                                e("div", { style: { fontSize: "11px", color: "#3ba55d" } }, "\\u2713 Webhook verbunden")
+                            )
+                        ),
+                        webhookError && !webhookLoading && e("div", { style: { fontSize: "12px", color: "#ed4245", marginBottom: "8px" } }, webhookError),
+                        e("button", {
+                            onClick: sendWebhook,
+                            disabled: sendStatus === "sending" || !webhookUrl.trim(),
+                            style: {
+                                width: "100%", padding: "10px", border: "none", borderRadius: "6px",
+                                cursor: (sendStatus === "sending" || !webhookUrl.trim()) ? "not-allowed" : "pointer",
+                                color: "#fff", fontSize: "13px", fontWeight: 600,
+                                opacity: !webhookUrl.trim() ? 0.5 : 1, transition: "background 0.2s",
+                                background: sendStatus === "ok" ? "#3ba55d" : sendStatus === "error" ? "#ed4245" : sendStatus === "sending" ? "#4752c4" : "#5865f2"
+                            }
+                        }, sendStatus === "sending" ? "\\u23f3 Wird gesendet..." : sendStatus === "ok" ? "\\u2713 Erfolgreich gesendet!" : sendStatus === "error" ? "\\u2717 Fehler!" : "\\u27a4 Embed senden"),
+                        sendStatus === "error" && sendError && e("div", { style: { marginTop: "8px", fontSize: "12px", color: "#ed4245", wordBreak: "break-word" } }, sendError)
+                    ),
+                    // ── Embed form sections ──
                     e(Section, { title: "Inhalt" },
                         e(Field, { label: "Farbe" },
                             e("div", { style: { display: "flex", gap: "8px", alignItems: "center" } },
@@ -426,7 +556,7 @@ function GhostEmbedApp({ onClose }) {
                     ),
                     e(Section, { title: "Bilder", open: false },
                         e(Field, { label: "Thumbnail (oben rechts)" }, e("input", { style: S.input, value: embed.thumbnail, placeholder: "https://...", onChange: ev => patch("thumbnail", ev.target.value) })),
-                        e(Field, { label: "Bild (groß, unten)" }, e("input", { style: S.input, value: embed.image, placeholder: "https://...", onChange: ev => patch("image", ev.target.value) }))
+                        e(Field, { label: "Bild (gro\\u00df, unten)" }, e("input", { style: S.input, value: embed.image, placeholder: "https://...", onChange: ev => patch("image", ev.target.value) }))
                     ),
                     e(Section, { title: "Footer", open: false },
                         e(Field, { label: "Footer-Text" }, e("input", { style: S.input, value: embed.footer.text, placeholder: "Footer-Text...", onChange: ev => patchNested("footer", { text: ev.target.value }) })),
@@ -443,29 +573,6 @@ function GhostEmbedApp({ onClose }) {
                             style: { width: "100%", padding: "8px", background: "var(--background-modifier-hover,#3f4147)", border: "1px dashed var(--background-modifier-accent,#4f545c)", borderRadius: "6px", cursor: "pointer", color: "var(--text-muted)", fontSize: "13px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }
                         }, "+ Feld hinzuf\\u00fcgen")
                     ),
-                    // Webhook section
-                    e("div", { style: { background: "var(--background-secondary,#2b2d31)", borderRadius: "8px", padding: "14px", marginBottom: "10px" } },
-                        e("div", { style: { fontSize: "13px", fontWeight: 700, color: "var(--header-primary,#f2f3f5)", marginBottom: "10px" } }, "Webhook senden"),
-                        e("label", { style: S.label }, "Webhook-URL"),
-                        e("input", {
-                            style: { ...S.input, marginBottom: "10px" },
-                            value: webhookUrl,
-                            placeholder: "https://discord.com/api/webhooks/...",
-                            onChange: ev => setWebhookUrl(ev.target.value)
-                        }),
-                        e("button", {
-                            onClick: sendWebhook,
-                            disabled: sendStatus === "sending" || !webhookUrl.trim(),
-                            style: {
-                                width: "100%", padding: "10px", border: "none", borderRadius: "6px",
-                                cursor: (sendStatus === "sending" || !webhookUrl.trim()) ? "not-allowed" : "pointer",
-                                color: "#fff", fontSize: "13px", fontWeight: 600,
-                                opacity: !webhookUrl.trim() ? 0.5 : 1, transition: "background 0.2s",
-                                background: sendStatus === "ok" ? "#3ba55d" : sendStatus === "error" ? "#ed4245" : sendStatus === "sending" ? "#4752c4" : "#5865f2"
-                            }
-                        }, sendStatus === "sending" ? "\\u23f3 Wird gesendet..." : sendStatus === "ok" ? "\\u2713 Erfolgreich gesendet!" : sendStatus === "error" ? "\\u2717 Fehler!" : "\\u27a4 Embed senden"),
-                        sendStatus === "error" && sendError && e("div", { style: { marginTop: "8px", fontSize: "12px", color: "#ed4245", wordBreak: "break-word" } }, sendError)
-                    ),
                     e("div", { style: { display: "flex", gap: "8px", marginTop: "4px" } },
                         e("button", {
                             onClick: copyJSON,
@@ -481,18 +588,21 @@ function GhostEmbedApp({ onClose }) {
                 e("div", { style: { flex: 1, overflowY: "auto", padding: "20px", background: "var(--background-primary,#313338)" } },
                     e("div", { style: { fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--text-muted)", marginBottom: "12px" } }, "Vorschau"),
                     e("div", { style: { display: "flex", gap: "14px", padding: "8px 0" } },
-                        e("div", { style: { width: "40px", height: "40px", borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#4f46e5)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px", fontWeight: 700, color: "#fff" } }, "G"),
+                        // Bot avatar in preview
+                        botAvatar
+                            ? e("img", { src: botAvatar, style: { width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 }, onError: ev => { ev.target.style.display = "none"; } })
+                            : e("div", { style: { width: "40px", height: "40px", borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#4f46e5)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px", fontWeight: 700, color: "#fff" } }, "G"),
                         e("div", { style: { flex: 1 } },
                             e("div", { style: { display: "flex", alignItems: "baseline", gap: "8px", marginBottom: "6px" } },
-                                e("span", { style: { fontSize: "14px", fontWeight: 700, color: "var(--header-primary)" } }, "GhostClient Bot"),
-                                e("span", { style: { fontSize: "11px", color: "var(--text-muted)" } }, "Heute")
+                                e("span", { style: { fontSize: "14px", fontWeight: 700, color: "var(--header-primary)" } }, botName),
+                                e("span", { style: { fontSize: "11px", color: "var(--text-muted)" } }, "Heute um " + new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }))
                             ),
                             e(EmbedPreview, { embed: embed })
                         )
                     ),
                     e("div", { style: { marginTop: "24px", padding: "12px", background: "var(--background-secondary)", borderRadius: "6px", fontSize: "12px", color: "var(--text-muted)", lineHeight: "1.5" } },
                         e("b", { style: { color: "var(--text-normal)" } }, "Tipp:"),
-                        " Klicke auf JSON kopieren und verwende den Code mit einem Discord-Bot oder Webhook."
+                        " Webhook-URL eingeben, Bot-Info wird automatisch geladen. Dann auf \\u27a4 Embed senden klicken."
                     )
                 )
             )

@@ -16,7 +16,7 @@ export default function (dist: string, target: string) {
     const files = [
         path.join(dist, "main.js"),
         path.join(dist, "preload.js"),
-        path.join(dist, "betterdiscord.js"),
+        path.join(dist, "ghostclient.js"),
         path.join(dist, "package.json"),
         path.join(dist, "editor", "preload.js"),
         path.join(dist, "editor", "script.js"),

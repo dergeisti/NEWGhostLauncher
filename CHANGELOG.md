@@ -1,4 +1,4 @@
-# BetterDiscord Changelog
+# GhostClient Changelog
 
 This changelog starts with the restructured 1.0.0 release that happened after context isolation changes. The changelogs here should more-or-less mirror the ones that get shown in the client but probably with less formatting and pizzazz.
 
@@ -13,7 +13,7 @@ This changelog starts with the restructured 1.0.0 release that happened after co
 
 1.13.10
 ### Fixed
-- Fixed crashing when trying to view BetterDiscord's custom setting tabs
+- Fixed crashing when trying to view GhostClient's custom setting tabs
 
 1.13.9
 ### Fixed
@@ -25,7 +25,7 @@ This changelog starts with the restructured 1.0.0 release that happened after co
 
 1.13.8
 ### Fixed
-- BetterDiscord now loads on macOS and Linux.
+- GhostClient now loads on macOS and Linux.
 
 ### Added
 - Added `--avatar-url-[size]` to avatars for theme attributes.
@@ -48,7 +48,7 @@ This changelog starts with the restructured 1.0.0 release that happened after co
 1.13.6
 
 ### Fixed
-- Fixed BetterDiscord not appearing in the `Settings Cog` context menu (right click menu)
+- Fixed GhostClient not appearing in the `Settings Cog` context menu (right click menu)
 - Fixed `Version Info` strings in settings not appearing
 - Native titlebar matches Linux now
 
@@ -64,12 +64,12 @@ This changelog starts with the restructured 1.0.0 release that happened after co
 
 ### Fixed
 - Fixed BdApi.Net.fetch not handling relative urls properly
-- BetterDiscord now properly checks for addon updates periodically
-- BetterDiscord now loads up correctly
+- GhostClient now properly checks for addon updates periodically
+- GhostClient now loads up correctly
 
 ### Improved
 - Tweaked styles for InstallCSS
-- BetterDiscord's Dropdown Component was rewrote
+- GhostClient's Dropdown Component was rewrote
 
 ### Removed
 
@@ -82,14 +82,14 @@ This changelog starts with the restructured 1.0.0 release that happened after co
 1.13.3
 
 ### Fixed:
-- BetterDiscord Settings section now appears correctly in the settings menu
+- GhostClient Settings section now appears correctly in the settings menu
 - Fixed css to match Discord's latest changes
 - Context Menu patches fixed
 
 1.13.2
 
 ### Fixed:
-- BetterDiscord Settings section now appears correctly in the settings menu
+- GhostClient Settings section now appears correctly in the settings menu
 - Fixed css to match Discord's latest changes
 - Context Menu patches fixed
 
@@ -99,10 +99,10 @@ This changelog starts with the restructured 1.0.0 release that happened after co
 ### Fixed:
 - Navigating to Plugins, Themes, or Settings from the context menu now correctly opens the intended page
 - Custom CSS file is now automatically created if it doesn't exist
-- aria-label for BetterDiscord section in settings panel now sets correctly
+- aria-label for GhostClient section in settings panel now sets correctly
 - Plugins/Themes Search bar clear button now properly resets the input field
 - Fixed css to match Discord's latest changes
-- BetterDiscord Settings section now appears correctly in the settings menu
+- GhostClient Settings section now appears correctly in the settings menu
 - Fixes for theme attributes
 - Flipped canary tooltip status fixed
 
@@ -139,12 +139,12 @@ This changelog starts with the restructured 1.0.0 release that happened after co
 - Updated module resolution to handle Discord's new proxy-based i18n system by fixing export handling and store filtering
 - Improved startup performance by replacing DataStore with lazy-loading JSON cache system
 - Enhanced code editor with features including autocomplete, status bar, problems panel (VS Code-like), and improved Monaco Editor integration
-- Moved update notices for BetterDiscord Core and Plugins & Themes away from Notices, to the new Notification API
+- Moved update notices for GhostClient Core and Plugins & Themes away from Notices, to the new Notification API
 - General freshen up of the CSS since Discord's large visual refresh
 - Monaco editor is now lazy-loaded, improving startup performance
 - Rewrote toasts to make them more in-line with NotificationApi logic & styling refresh
 - Startup toasts now only show "XX Plugins/Themes enabled" rather than individual toasts for each plugin
-- Changes the markdown for the betterdiscord:// protocol so it works in slate and masked links
+- Changes the markdown for the ghostclient:// protocol so it works in slate and masked links
 - Hijack opening links to open the download modal on all bd addon download urls
 - Visual changes to the react error recovery page to increase aesthetics.
 
@@ -159,7 +159,7 @@ This changelog starts with the restructured 1.0.0 release that happened after co
 - `Automatically Enable` tickbox not enabling the plugin if the file's name differed from the plugins store name
 - Webpack module listening to include initial modules and optimized plugin lifecycle calls with better error handling
 - Editor focus being lost in settings panel
-- Issues with the BetterDiscord updater functionality and resolved problems with the getlazy utility
+- Issues with the GhostClient updater functionality and resolved problems with the getlazy utility
 - Fixes a bug where if `pluginInstance.onSwitch` or `pluginInstance.observer` were non-nullable but not a function it would error
 - Fixed `/[addon type] action:Enable name:[addon name]` from saying the addon started even if it errored
 - Slight changes to `getByStrings` to increase webpack search speed
@@ -286,7 +286,7 @@ This changelog starts with the restructured 1.0.0 release that happened after co
 ### Added
  - Added built-in addon store
  - Slash command API
- - Default BetterDiscord slash commands
+ - Default GhostClient slash commands
  - Search webpack modules by source code string (or regex) search (`getBySource`)
  - Basic theme attributes
  - React crash recovery

@@ -101,7 +101,7 @@
                 },
                 "debugLogs": {
                     "name": "Virheenkorjauksen logit",
-                    "note": "Tulostaa kaiken konsolista BetterDiscord-kansion debug.log-tiedostoon"
+                    "note": "Tulostaa kaiken konsolista GhostClient-kansion debug.log-tiedostoon"
                 },
                 "devTools": {
                     "name": "DevTools",
@@ -215,9 +215,9 @@
     },
     "Updater": {
         "updateFailed": "Päivitys epäonnistui",
-        "updateFailedMessage": "BetterDiscordin päivitys epäonnistui. Lataa asennusohjelman uusin versio verkkosivustoltamme (https://betterdiscord.app/) ja asenna se uudelleen.",
+        "updateFailedMessage": "GhostClientin päivitys epäonnistui. Lataa asennusohjelman uusin versio verkkosivustoltamme (https://ghostclient.app/) ja asenna se uudelleen.",
         "updateSuccessful": "Päivittäminen onnistui!",
-        "updateAvailable": "BetterDiscordilla on uusi päivitys",
+        "updateAvailable": "GhostClientilla on uusi päivitys",
         "addonUpdated": "{{name}} on päivitetty versioon {{version}}!",
         "checking": "Tarkistetaan päivityksiä!",
         "finishedChecking": "Päivitysten tarkistaminen on valmis!",

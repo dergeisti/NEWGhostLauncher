@@ -12,6 +12,6 @@ export default function (dist: string) {
         if (currentPkg.name && currentPkg.main && currentPkg.main === "main.js") return console.log("    ✅ Existing package.json is valid");
         console.log("    ⚠️ Existing package.json is invalid");
     }
-    fs.writeFileSync(pkgFile, JSON.stringify({name: "betterdiscord", main: "main.js"}));
+    fs.writeFileSync(pkgFile, JSON.stringify({name: "ghostclient", main: "main.js"}));
     console.log("    ✅ Created new package.json");
 };

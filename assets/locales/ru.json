@@ -101,7 +101,7 @@
                 },
                 "debugLogs": {
                     "name": "Логировать ошибки",
-                    "note": "Записывает весь вывод из консоли в файл debug.log в папке BetterDiscord"
+                    "note": "Записывает весь вывод из консоли в файл debug.log в папке GhostClient"
                 },
                 "devTools": {
                     "name": "Меню разработчика",
@@ -217,9 +217,9 @@
     },
     "Updater": {
         "updateFailed": "Ошибка обновления",
-        "updateFailedMessage": "Не удалось обновить BetterDiscord. Пожалуйста скачайте последнюю версию загрузчика с нашего сайта (https://betterdiscord.app/) и переустановите программу.",
+        "updateFailedMessage": "Не удалось обновить GhostClient. Пожалуйста скачайте последнюю версию загрузчика с нашего сайта (https://ghostclient.app/) и переустановите программу.",
         "updateSuccessful": "Обновление успешно!",
-        "updateAvailable": "BetterDiscord имеет обновление (v{{version}})",
+        "updateAvailable": "GhostClient имеет обновление (v{{version}})",
         "addonUpdated": "{{name}} был обновлен до версии {{version}}",
         "checking": "Проверить обновления!",
         "finishedChecking": "Проверка обновлений завершена!",

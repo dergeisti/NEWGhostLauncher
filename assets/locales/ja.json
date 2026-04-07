@@ -101,7 +101,7 @@
                 },
                 "debugLogs": {
                     "name": "デバッグログ",
-                    "note": "コンソールからBetterDiscordフォルダのdebug.logファイルに全てを出力します。"
+                    "note": "コンソールからGhostClientフォルダのdebug.logファイルに全てを出力します。"
                 },
                 "devTools": {
                     "name": "デベロッパーツール",
@@ -217,9 +217,9 @@
     },
     "Updater": {
         "updateFailed": "アップデートに失敗しました！",
-        "updateFailedMessage": "BetterDiscordのアップデートに失敗しました。ホームページ(https://betterdiscord.app/)から最新版のインストーラーをダウンロードして、再インストールしてください。",
+        "updateFailedMessage": "GhostClientのアップデートに失敗しました。ホームページ(https://ghostclient.app/)から最新版のインストーラーをダウンロードして、再インストールしてください。",
         "updateSuccessful": "アップデートに成功しました！",
-        "updateAvailable": "BetterDiscordに新しいアップデート(v{{version}})があります。",
+        "updateAvailable": "GhostClientに新しいアップデート(v{{version}})があります。",
         "addonUpdated": "{{name}}がバージョン{{version}}にアップデートされました！",
         "checking": "アップデートを確認",
         "finishedChecking": "アップデートの確認が終了しました！",

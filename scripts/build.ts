@@ -19,7 +19,7 @@ interface EntryPoint {
 }
 
 const moduleConfigs: Record<string, EntryPoint> = {
-    betterdiscord: {"in": "src/betterdiscord/index.ts", "out": "betterdiscord"},
+    ghostclient: {"in": "src/ghostclient/index.ts", "out": "ghostclient"},
     main: {"in": "src/electron/main/index.ts", "out": "main"},
     preload: {"in": "src/electron/preload/index.ts", "out": "preload"},
     editorPreload: {"in": "src/editor/preload.ts", "out": "editor/preload"},

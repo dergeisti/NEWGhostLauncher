@@ -36,8 +36,6 @@ import Patcher from "./patcher";
 import {BUNDLED_PLUGINS} from "@bundled/plugins";
 import {BUNDLED_THEMES} from "@bundled/themes";
 
-import EmbedBuilder from "@ui/settings/embedbuilder";
-import {LayoutTemplateIcon} from "lucide-react";
 
 export default new class Core {
     hasStarted = false;
@@ -52,18 +50,24 @@ export default new class Core {
 
         for (const plugin of BUNDLED_PLUGINS) {
             const dest = path.join(pluginsFolder, plugin.filename);
-            if (!fs.existsSync(dest)) {
-                try { fs.writeFileSync(dest, plugin.content, "utf8"); }
-                catch (e) { Logger.err("Core", `Failed to install bundled plugin ${plugin.filename}`, e); }
+            try {
+                const existing = fs.existsSync(dest) ? fs.readFileSync(dest, "utf8") : null;
+                if (existing !== plugin.content) {
+                    fs.writeFileSync(dest, plugin.content, "utf8");
+                }
             }
+            catch (e) { Logger.err("Core", `Failed to install bundled plugin ${plugin.filename}`, e); }
         }
 
         for (const theme of BUNDLED_THEMES) {
             const dest = path.join(themesFolder, theme.filename);
-            if (!fs.existsSync(dest)) {
-                try { fs.writeFileSync(dest, theme.content, "utf8"); }
-                catch (e) { Logger.err("Core", `Failed to install bundled theme ${theme.filename}`, e); }
+            try {
+                const existing = fs.existsSync(dest) ? fs.readFileSync(dest, "utf8") : null;
+                if (existing !== theme.content) {
+                    fs.writeFileSync(dest, theme.content, "utf8");
+                }
             }
+            catch (e) { Logger.err("Core", `Failed to install bundled theme ${theme.filename}`, e); }
         }
     }
 
@@ -125,13 +129,6 @@ export default new class Core {
         Logger.log("Startup", "Loading Themes");
         // const themeErrors = [];
         const themeErrors = ThemeManager.initialize();
-
-        Logger.log("Startup", "Registering Embed Builder");
-        Settings.registerPanel("embedbuilder", "Embed Builder", {
-            order: 10,
-            element: EmbedBuilder,
-            icon: LayoutTemplateIcon
-        });
 
         Logger.log("Startup", "Initializing Updater");
         Updater.initialize();

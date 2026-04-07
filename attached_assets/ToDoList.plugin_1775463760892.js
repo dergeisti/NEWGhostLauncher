@@ -7,8 +7,8 @@
  * @invite jsQ9UP7kCA
  * @authorId 468132563714703390
  * @donate https://devevil.com/dnt
- * @source https://github.com/DevEvil99/ToDoList-BetterDiscord-Plugin
- * @updateUrl https://raw.githubusercontent.com/DevEvil99/ToDoList-BetterDiscord-Plugin/main/ToDoList.plugin.js
+ * @source https://github.com/DevEvil99/ToDoList-GhostClient-Plugin
+ * @updateUrl https://raw.githubusercontent.com/DevEvil99/ToDoList-GhostClient-Plugin/main/ToDoList.plugin.js
  */
 
 const config = {
@@ -22,8 +22,8 @@ const config = {
             github_username: "DevEvil99"
         }],
         website: "https://devevil.com",
-        github: "https://github.com/DevEvil99/ToDoList-BetterDiscord-Plugin",
-        github_raw: "https://raw.githubusercontent.com/DevEvil99/ToDoList-BetterDiscord-Plugin/main/ToDoList.plugin.js",
+        github: "https://github.com/DevEvil99/ToDoList-GhostClient-Plugin",
+        github_raw: "https://raw.githubusercontent.com/DevEvil99/ToDoList-GhostClient-Plugin/main/ToDoList.plugin.js",
         invite: "jsQ9UP7kCA",
     }
 };

@@ -6,3 +6,15 @@ id = "qDoP_gfbuAxDnPIV3JWnQ"
 uri = "file://GhostClient-source.tar.gz"
 type = "unspecified"
 title = "GhostClient – Sourcecode (mit GhostEmbed Plugin)"
+
+[[outputs]]
+id = "bgBYuvjnRZQdQGaOXp77h"
+uri = "file://ghostclient-src.tar.gz"
+type = "unspecified"
+title = "GhostClient – src Code (aktuell)"
+
+[[outputs]]
+id = "O-4MJ-hfDpsAgFhiAKMJI"
+uri = "file://ghostclient-full.tar.gz"
+type = "unspecified"
+title = "GhostClient – Markdown-Vorschau + Webhook Fix"

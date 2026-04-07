@@ -1,6 +1,6 @@
 # GhostClient
 
-A Discord client modification forked from BetterDiscord and fully rebranded as GhostClient. Enhances Discord with themes, plugins, and built-in tools.
+A Discord client modification forked from GhostClient and fully rebranded as GhostClient. Enhances Discord with themes, plugins, and built-in tools.
 
 ## Project Overview
 
@@ -16,9 +16,9 @@ GhostClient is an Electron-based tool that injects modifications into the Discor
 
 ## Project Structure
 
-- `src/betterdiscord/` — Core GhostClient logic (API, builtins, modules, UI, webpack)
-- `src/betterdiscord/bundled/` — Bundled plugins (`plugins.ts`) and themes (`themes.ts`) shipped with GhostClient
-- `src/betterdiscord/ui/settings/embedbuilder.tsx` — Embed Builder panel (discohook.org integration)
+- `src/ghostclient/` — Core GhostClient logic (API, builtins, modules, UI, webpack)
+- `src/ghostclient/bundled/` — Bundled plugins (`plugins.ts`) and themes (`themes.ts`) shipped with GhostClient
+- `src/ghostclient/ui/settings/embedbuilder.tsx` — Embed Builder panel (discohook.org integration)
 - `src/electron/` — Electron main and preload process code
 - `src/editor/` — Standalone code editor (CSS/Plugin editor)
 - `src/common/` — Shared utilities and constants
@@ -29,9 +29,9 @@ GhostClient is an Electron-based tool that injects modifications into the Discor
 ## GhostClient Features
 
 ### Branding
-- All "BetterDiscord" references renamed to "GhostClient" in UI, protocols, logs, and settings
-- Data folder changed from `BetterDiscord/` to `GhostClient/` on disk
-- Protocol changed from `betterdiscord://` to `ghostclient://`
+- All "GhostClient" references renamed to "GhostClient" in UI, protocols, logs, and settings
+- Data folder changed from `GhostClient/` to `GhostClient/` on disk
+- Protocol changed from `ghostclient://` to `ghostclient://`
 - Logger prefix changed to `[GhostClient]`
 
 ### Bundled Plugins (auto-installed to plugins folder on first startup)
@@ -54,7 +54,7 @@ GhostClient is an Electron-based tool that injects modifications into the Discor
 ## Build Output
 
 Running `bun run build` produces:
-- `dist/betterdiscord.js` — Main Discord modification bundle (includes all bundled addons)
+- `dist/ghostclient.js` — Main Discord modification bundle (includes all bundled addons)
 - `dist/main.js` — Electron main process
 - `dist/preload.js` — Electron preload script
 - `dist/editor/` — Standalone code editor

@@ -1,4 +1,4 @@
-name: BetterDiscord CI
+name: GhostClient CI
 
 on:
   push:
@@ -41,7 +41,7 @@ jobs:
         with:
           if-no-files-found: error
           retention-days: 30
-          path: dist/betterdiscord.asar
+          path: dist/ghostclient.asar
 
       # Update the canary tag on push to development
       - name: Update tag
@@ -58,8 +58,8 @@ jobs:
         if: ${{github.event_name == 'push'}}
         with:
           prerelease: true
-          name: BetterDiscord Canary
-          body: This is the canary release for BetterDiscord automatically kept up to date using GitHub actions.
+          name: GhostClient Canary
+          body: This is the canary release for GhostClient automatically kept up to date using GitHub actions.
           tag_name: canary
           fail_on_unmatched_files: true
-          files: dist/betterdiscord.asar
+          files: dist/ghostclient.asar

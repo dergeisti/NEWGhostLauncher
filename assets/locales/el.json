@@ -101,7 +101,7 @@
                 },
                 "debugLogs": {
                     "name": "Καταγραφές Αποσφαλμάτωσης",
-                    "note": "Εξάγει τα πάντα από την κονσόλα στο αρχείο debug.log στο φάκελο του BetterDiscord"
+                    "note": "Εξάγει τα πάντα από την κονσόλα στο αρχείο debug.log στο φάκελο του GhostClient"
                 },
                 "devTools": {
                     "name": "Εργαλεία Δημιουργού",
@@ -217,9 +217,9 @@
     },
     "Updater": {
         "updateFailed": "Η ενημέρωση Απέτυχε!",
-        "updateFailedMessage": "Το BetterDiscord απέτυχε να ενημερωθεί. Λάβετε την τελευταία έκδοση του προγράμματος εγκατάστασης από την ιστοσελίδα μας (https://betterdiscord.app/) και κάντε επανεγκατάσταση.",
+        "updateFailedMessage": "Το GhostClient απέτυχε να ενημερωθεί. Λάβετε την τελευταία έκδοση του προγράμματος εγκατάστασης από την ιστοσελίδα μας (https://ghostclient.app/) και κάντε επανεγκατάσταση.",
         "updateSuccessful": "Η Ενημέρωση ήταν Επιτυχής!",
-        "updateAvailable": "Το BetterDiscord έχει μια νέα ενημερωση (v{{version}})",
+        "updateAvailable": "Το GhostClient έχει μια νέα ενημερωση (v{{version}})",
         "addonUpdated": "Το {{name}} έχει ενημερωθεί στην έκδοση {{version}}!",
         "checking": "Έλεγχος για ενημερώσεις!",
         "finishedChecking": "Ολοκλήρωση ελέγχου για ενημερώσεις!",

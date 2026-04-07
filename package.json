@@ -1,5 +1,5 @@
 {
-    "name": "betterdiscord",
+    "name": "ghostclient",
     "version": "1.13.11",
     "description": "Enhances Discord by adding functionality and themes.",
     "type": "module",
@@ -8,16 +8,16 @@
         "watch": "bun scripts/build.ts --watch",
         "build:main": "bun run build --module=main",
         "build:preload": "bun run build --module=preload",
-        "build:betterdiscord": "bun run build --module=betterdiscord",
+        "build:ghostclient": "bun run build --module=ghostclient",
         "build:production": "NODE_ENV=production bun run build --minify",
         "inject": "bun scripts/inject.js",
         "lint": "bun run --bun eslint",
-        "lint-css": "stylelint src/betterdiscord/styles/*.css && stylelint src/betterdiscord/styles/**/*.css",
+        "lint-css": "stylelint src/ghostclient/styles/*.css && stylelint src/ghostclient/styles/**/*.css",
         "test": "bun test tests/",
         "dist": "bun run build:production && bun scripts/pack.js",
         "api": "bun run --bun jsdoc -X -r renderer/src/modules/api/ > dist/jsdoc-ast.json",
         "translations": "bun -r dotenv/config scripts/translations.js",
-        "circulars": "bun run --bun dpdm -T --no-warning --no-tree src/betterdiscord/index.js"
+        "circulars": "bun run --bun dpdm -T --no-warning --no-tree src/ghostclient/index.js"
     },
     "devDependencies": {
         "@electron/asar": "^3.2.0",

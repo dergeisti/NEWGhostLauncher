@@ -10,7 +10,7 @@ import copyFiles from "./helpers/copy";
 const useBdRelease = args[2] && args[2].toLowerCase() === "release";
 const releaseInput = useBdRelease ? args[3] && args[3].toLowerCase() : args[2] && args[2].toLowerCase();
 const release = releaseInput === "canary" ? "Discord Canary" : releaseInput === "ptb" ? "Discord PTB" : "Discord";
-const bdPath = useBdRelease ? path.resolve(__dirname, "..", "dist", "betterdiscord.asar") : path.resolve(__dirname, "..", "dist");
+const bdPath = useBdRelease ? path.resolve(__dirname, "..", "dist", "ghostclient.asar") : path.resolve(__dirname, "..", "dist");
 const discordPath = await (async function () {
     let resourcePath = "";
     if (process.platform === "win32") {
@@ -55,8 +55,8 @@ console.log(`    ✅ Found ${release} in ${discordPath}`);
 const indexJs = path.join(discordPath, "index.js");
 if (fs.existsSync(indexJs)) fs.unlinkSync(indexJs);
 if (process.env.WSL_DISTRO_NAME) {
-    copyFiles(bdPath, path.join(discordPath, "betterdiscord"));
-    fs.writeFileSync(indexJs, `require("./betterdiscord");\nmodule.exports = require("./core.asar");`);
+    copyFiles(bdPath, path.join(discordPath, "ghostclient"));
+    fs.writeFileSync(indexJs, `require("./ghostclient");\nmodule.exports = require("./core.asar");`);
 }
 else {
     fs.writeFileSync(indexJs, `require("${bdPath.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}");\nmodule.exports = require("./core.asar");`);

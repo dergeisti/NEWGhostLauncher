@@ -39,7 +39,7 @@
                 "name": "Addon Store",
                 "bdAddonStore": {
                     "name": "Enable Addon Store",
-                    "note": "Enables the BetterDiscord Addon Store."
+                    "note": "Enables the GhostClient Addon Store."
                 },
                 "alwaysEnable": {
                     "name": "Always Enable",
@@ -142,7 +142,7 @@
                 },
                 "debugLogs": {
                     "name": "Debug Logs",
-                    "note": "Outputs everything from the console into the debug.log file in the BetterDiscord folder"
+                    "note": "Outputs everything from the console into the debug.log file in the GhostClient folder"
                 },
                 "devTools": {
                     "name": "DevTools",
@@ -393,9 +393,9 @@
     },
     "Updater": {
         "updateFailed": "Update Failed!",
-        "updateFailedMessage": "BetterDiscord failed to update. Please download the latest version of the installer from our website (https://betterdiscord.app/) and reinstall.",
+        "updateFailedMessage": "GhostClient failed to update. Please download the latest version of the installer from our website (https://ghostclient.app/) and reinstall.",
         "updateSuccessful": "Update Successful!",
-        "updateAvailable": "BetterDiscord has a new update (v{{version}})",
+        "updateAvailable": "GhostClient has a new update (v{{version}})",
         "viewUpdates": "View Updates",
         "addonUpdaterNotificationTitle": "Addon Updater",
         "addonUpdatesAvailable": {

@@ -6,7 +6,7 @@ import buildPackage from "./helpers/package";
 
 
 const dist = path.resolve(__dirname, "..", "dist");
-const bundleFile = path.join(dist, "betterdiscord.asar");
+const bundleFile = path.join(dist, "ghostclient.asar");
 
 const makeBundle = function () {
     console.log("");
@@ -15,7 +15,7 @@ const makeBundle = function () {
         "dist/main.js",
         "dist/package.json",
         "dist/preload.js",
-        "dist/betterdiscord.js",
+        "dist/ghostclient.js",
         "dist/editor/preload.js",
         "dist/editor/script.js",
         "dist/editor/index.html"

@@ -1,12 +1,12 @@
 {
     // This was adapted from Vencord's launch.json https://github.com/Vendicated/Vencord/blob/main/.vscode/launch.json
     //
-    // These configurations allow you to use VScode's debugging tools with BetterDiscord.
+    // These configurations allow you to use VScode's debugging tools with GhostClient.
     //
     // First, launch one of these configurations or compound configurations directly from VSCode.
     //
     // Then, to debug the "electron" packages run Discord from the command line with the --inspect flag.
-    // To debug the "betterdiscord" package, add the --remote-debugging-port=9222 flag.
+    // To debug the "ghostclient" package, add the --remote-debugging-port=9222 flag.
     // You can combine both to end up with a command like ./Discord.exe --inspect --remote-debugging-port=9222
     //
     // Once Discord is up and running you can come back here make use of the debugger tools.
@@ -17,7 +17,7 @@
             "port": 9222,
             "request": "attach",
             "type": "chrome",
-            "webRoot": "${workspaceFolder}/src/betterdiscord"
+            "webRoot": "${workspaceFolder}/src/ghostclient"
         },
         {
             "name": "Main & Preload",

@@ -26,7 +26,7 @@
     "javascript.preferences.quoteStyle": "double",
     "javascript.format.insertSpaceAfterOpeningAndBeforeClosingNonemptyBraces": false,
     "javascript.format.insertSpaceAfterOpeningAndBeforeClosingEmptyBraces": false,
-    "javascript.preferences.autoImportFileExcludePatterns": ["src/betterdiscord/api/*"],
+    "javascript.preferences.autoImportFileExcludePatterns": ["src/ghostclient/api/*"],
 
     // TypeScript
     "[typescript]": {
@@ -39,7 +39,7 @@
     "typescript.preferences.quoteStyle": "double",
     "typescript.format.insertSpaceAfterOpeningAndBeforeClosingNonemptyBraces": false,
     "typescript.format.insertSpaceAfterOpeningAndBeforeClosingEmptyBraces": false,
-    "typescript.preferences.autoImportFileExcludePatterns": ["src/betterdiscord/api/*"],
+    "typescript.preferences.autoImportFileExcludePatterns": ["src/ghostclient/api/*"],
 
 
     // Extensions

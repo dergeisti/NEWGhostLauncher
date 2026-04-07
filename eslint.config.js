@@ -135,15 +135,15 @@ export default ts.config(
 
     // Setup rules for renderer package
     {
-        files: ["src/betterdiscord/**/*"],
+        files: ["src/ghostclient/**/*"],
         ...react.configs.flat.recommended,
     },
     {
-        files: ["src/betterdiscord/**/*"],
+        files: ["src/ghostclient/**/*"],
         ...reactHooks.configs["recommended-latest"]
     },
     {
-        files: ["src/betterdiscord/**/*"],
+        files: ["src/ghostclient/**/*"],
         settings: {
             react: {
                 version: "18.3"
