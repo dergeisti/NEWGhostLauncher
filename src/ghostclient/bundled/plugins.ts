@@ -1009,5 +1009,283 @@ class GhostDoubleClickToEdit {
 }
 
 module.exports = GhostDoubleClickToEdit;`
+    },
+    {
+        filename: "GhostClientLogo.plugin.js",
+        content: `/**
+ * @name GhostClientLogo
+ * @author GhostClient
+ * @description Ersetzt das GhostClient-Logo und Lade-Icon mit einem eigenen Bild. Einstellungen \u00f6ffnen, um den Logo Manager zu starten.
+ * @version 1.0.0
+ * @source https://github.com/ghostclient
+ */
+
+const _R = BdApi.React;
+const _e = _R.createElement.bind(_R);
+const { useState, useEffect, useRef, useCallback } = _R;
+
+const PLUGIN_ID = "GhostClientLogo";
+const DATA_KEY = "customLogoDataUrl";
+
+function applyCustomLogo(url) {
+    BdApi.DOM.addStyle(PLUGIN_ID + "_css",
+        "#bd-loading-icon { background-image: url('" + url + "') !important; } " +
+        "img.lucide-ghostclient { content: url('" + url + "') !important; }"
+    );
+    document.querySelectorAll("img.lucide-ghostclient").forEach(function(img) { img.src = url; });
+}
+
+function removeCustomLogo() {
+    BdApi.DOM.removeStyle(PLUGIN_ID + "_css");
+}
+
+function processImage(dataUrl) {
+    return new Promise(function(resolve) {
+        const img = new Image();
+        img.onload = function() {
+            const size = 256;
+            const canvas = document.createElement("canvas");
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext("2d");
+            const side = Math.min(img.width, img.height);
+            const sx = (img.width - side) / 2;
+            const sy = (img.height - side) / 2;
+            ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+            resolve(canvas.toDataURL("image/png"));
+        };
+        img.src = dataUrl;
+    });
+}
+
+function GhostLogoUI({ onClose }) {
+    const [state, setState] = useState({ phase: "upload", uploaded: null, generated: null, dragging: false, msg: "" });
+    const [pos, setPos] = useState({ x: Math.max(0, window.innerWidth / 2 - 220), y: Math.max(0, window.innerHeight / 2 - 240) });
+    const isDragging = useRef(false);
+    const dragOffset = useRef({ x: 0, y: 0 });
+    const winRef = useRef(null);
+    const fileInputRef = useRef(null);
+    const merge = useCallback(function(obj) { setState(function(p) { return Object.assign({}, p, obj); }); }, []);
+
+    useEffect(function() {
+        const saved = BdApi.Data.load(PLUGIN_ID, DATA_KEY);
+        if (saved) merge({ phase: "applied", generated: saved });
+    }, []);
+
+    useEffect(function() {
+        const onMove = function(ev) {
+            if (!isDragging.current) return;
+            setPos({ x: ev.clientX - dragOffset.current.x, y: ev.clientY - dragOffset.current.y });
+        };
+        const onUp = function() { isDragging.current = false; };
+        document.addEventListener("mousemove", onMove, true);
+        document.addEventListener("mouseup", onUp);
+        return function() {
+            document.removeEventListener("mousemove", onMove, true);
+            document.removeEventListener("mouseup", onUp);
+        };
+    }, []);
+
+    const startDrag = useCallback(function(ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const r = winRef.current.getBoundingClientRect();
+        dragOffset.current = { x: ev.clientX - r.left, y: ev.clientY - r.top };
+        isDragging.current = true;
+    }, []);
+
+    function handleFile(file) {
+        if (!file || !file.type.startsWith("image/")) return;
+        const reader = new FileReader();
+        reader.onload = function(ev) { merge({ phase: "preview", uploaded: ev.target.result }); };
+        reader.readAsDataURL(file);
+    }
+
+    function handleGenerate() {
+        if (!state.uploaded) return;
+        processImage(state.uploaded).then(function(url) { merge({ phase: "ready", generated: url }); });
+    }
+
+    function handleApply() {
+        BdApi.Data.save(PLUGIN_ID, DATA_KEY, state.generated);
+        applyCustomLogo(state.generated);
+        merge({ phase: "applied", msg: "\u2705 Logo erfolgreich aktualisiert!" });
+        setTimeout(function() { merge({ msg: "" }); }, 3000);
+    }
+
+    function handleReset() {
+        BdApi.Data.save(PLUGIN_ID, DATA_KEY, null);
+        removeCustomLogo();
+        merge({ phase: "upload", uploaded: null, generated: null, msg: "\uD83D\uDD04 Standard-Logo wiederhergestellt!" });
+        setTimeout(function() { merge({ msg: "" }); }, 3000);
+    }
+
+    function uploadZone(mini) {
+        return _e("div", {
+            style: {
+                border: "2px dashed " + (state.dragging ? "#7c3aed" : "var(--background-modifier-accent,#3f4147)"),
+                borderRadius: "8px",
+                padding: mini ? "14px" : "28px 16px",
+                textAlign: "center",
+                cursor: "pointer",
+                marginBottom: "10px",
+                transition: "all 0.2s",
+                background: state.dragging ? "rgba(124,58,237,0.08)" : "var(--background-secondary,#2b2d31)",
+            },
+            onClick: function() { if (fileInputRef.current) fileInputRef.current.click(); },
+            onDragOver: function(ev) { ev.preventDefault(); merge({ dragging: true }); },
+            onDragLeave: function() { merge({ dragging: false }); },
+            onDrop: function(ev) { ev.preventDefault(); merge({ dragging: false }); handleFile(ev.dataTransfer.files[0]); },
+        },
+            _e("input", {
+                ref: fileInputRef, type: "file", accept: "image/*",
+                style: { display: "none" },
+                onChange: function(ev) { handleFile(ev.target.files[0]); }
+            }),
+            _e("div", { style: { fontSize: mini ? "22px" : "32px", marginBottom: "6px" } }, "\u2B06\uFE0F"),
+            _e("div", { style: { fontWeight: 600, fontSize: mini ? "12px" : "14px", color: "var(--text-normal)" } }, "Lade Bild Datei hoch"),
+            !mini && _e("div", { style: { fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" } }, "Klicken oder Bild hierher ziehen")
+        );
+    }
+
+    function actionBtn(label, bg, color, onClick) {
+        return _e("button", {
+            onClick: onClick,
+            style: { width: "100%", padding: "11px", border: "none", borderRadius: "6px", fontSize: "14px", fontWeight: 700, color: color || "#fff", background: bg, cursor: "pointer", marginBottom: "8px" }
+        }, label);
+    }
+
+    function imgPreview(url, border, label) {
+        return _e("div", { style: { textAlign: "center", marginBottom: "14px" } },
+            _e("img", { src: url, style: { width: "80px", height: "80px", borderRadius: "50%", objectFit: "cover", border: "3px solid " + border } }),
+            label && _e("div", { style: { fontSize: "12px", color: "var(--text-muted)", marginTop: "6px", fontWeight: 600 } }, label)
+        );
+    }
+
+    const phase = state.phase;
+
+    return _e("div", {
+        ref: winRef,
+        style: {
+            position: "fixed",
+            left: pos.x + "px",
+            top: pos.y + "px",
+            width: "440px",
+            background: "var(--background-primary,#313338)",
+            borderRadius: "10px",
+            boxShadow: "0 8px 40px rgba(0,0,0,0.65)",
+            zIndex: 10000,
+            overflow: "hidden",
+            pointerEvents: "all",
+        }
+    },
+        _e("div", {
+            onMouseDown: startDrag,
+            style: {
+                display: "flex", alignItems: "center", padding: "0 14px",
+                height: "44px", background: "var(--background-secondary,#2b2d31)",
+                borderBottom: "1px solid var(--background-modifier-accent,#3f4147)",
+                cursor: "grab", userSelect: "none",
+            }
+        },
+            _e("span", { style: { width: "8px", height: "8px", borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#4f46e5)", display: "inline-block", marginRight: "10px" } }),
+            _e("span", { style: { fontWeight: 700, fontSize: "14px", color: "var(--header-primary)", flex: 1 } }, "GhostClient \u00b7 Logo Manager"),
+            _e("div", {
+                onMouseDown: function(ev) { ev.stopPropagation(); },
+                onClick: onClose,
+                style: { width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "4px", cursor: "pointer", color: "var(--text-muted)", fontSize: "20px" }
+            }, "\u00d7")
+        ),
+        _e("div", { style: { padding: "20px" } },
+            phase === "upload" && uploadZone(false),
+
+            phase === "preview" && _e("div", null,
+                uploadZone(false),
+                state.uploaded && imgPreview(state.uploaded, "#7c3aed", "Bild geladen \u2713"),
+                actionBtn("\u2728 Generieren", "linear-gradient(135deg,#7c3aed,#4f46e5)", "#fff", handleGenerate)
+            ),
+
+            phase === "ready" && _e("div", null,
+                imgPreview(state.generated, "#7c3aed", "Logo bereit!"),
+                actionBtn("\u2705 Update Logo", "#3ba55d", "#fff", handleApply),
+                actionBtn("\uD83D\uDD04 Reset auf Default", "var(--background-modifier-hover,#3f4147)", "var(--text-normal)", handleReset)
+            ),
+
+            phase === "applied" && _e("div", null,
+                state.generated && imgPreview(state.generated, "#3ba55d", "\u2705 Aktives Custom-Logo"),
+                uploadZone(true),
+                actionBtn("\uD83D\uDD04 Reset auf Default", "var(--background-modifier-hover,#3f4147)", "var(--text-normal)", handleReset)
+            ),
+
+            state.msg && _e("div", {
+                style: { marginTop: "4px", padding: "10px", background: "var(--background-secondary)", borderRadius: "6px", fontSize: "13px", textAlign: "center", color: "var(--text-normal)" }
+            }, state.msg),
+
+            _e("div", {
+                style: { marginTop: "10px", padding: "10px 12px", background: "var(--background-secondary,#2b2d31)", borderRadius: "6px", fontSize: "12px", color: "var(--text-muted)", lineHeight: "1.5" }
+            }, "Das Logo wird sofort \u00fcbernommen und beim n\u00e4chsten Start automatisch geladen.")
+        )
+    );
+}
+
+class GhostClientLogo {
+    constructor() {
+        this._div = null;
+        this._root = null;
+        this._obs = null;
+        this._saved = null;
+    }
+
+    start() {
+        this._saved = BdApi.Data.load(PLUGIN_ID, DATA_KEY) || null;
+        if (this._saved) {
+            applyCustomLogo(this._saved);
+            this._obs = new MutationObserver(() => {
+                if (!this._saved) return;
+                document.querySelectorAll("img.lucide-ghostclient").forEach(function(img) {
+                    if (img.src !== this._saved) img.src = this._saved;
+                }.bind(this));
+            });
+            this._obs.observe(document.body, { childList: true, subtree: true });
+        }
+    }
+
+    stop() {
+        if (this._obs) { this._obs.disconnect(); this._obs = null; }
+        removeCustomLogo();
+        this._closeWindow();
+    }
+
+    getSettingsPanel() {
+        const div = document.createElement("div");
+        div.style.cssText = "padding: 16px;";
+        const btn = document.createElement("button");
+        btn.textContent = "\uD83C\uDFA8 Logo Manager \u00f6ffnen";
+        btn.style.cssText = "padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #7c3aed, #4f46e5); width: 100%;";
+        btn.onclick = () => this._openWindow();
+        div.appendChild(btn);
+        return div;
+    }
+
+    _openWindow() {
+        if (this._div) return;
+        const div = document.createElement("div");
+        div.id = "gc-logo-manager-root";
+        div.style.cssText = "position: fixed; inset: 0; z-index: 9999; pointer-events: none;";
+        document.body.appendChild(div);
+        this._div = div;
+        const root = BdApi.ReactDOM.createRoot(div);
+        this._root = root;
+        const self = this;
+        root.render(_e(GhostLogoUI, { onClose: function() { self._closeWindow(); } }));
+    }
+
+    _closeWindow() {
+        if (this._root) { this._root.unmount(); this._root = null; }
+        if (this._div) { this._div.remove(); this._div = null; }
+    }
+}
+
+module.exports = GhostClientLogo;`
     }
 ];
