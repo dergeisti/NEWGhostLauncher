@@ -6,28 +6,24 @@ import ipc from "@modules/ipc";
 import Button from "../base/button";
 import AddonCard from "./addoncard";
 import Dropdown from "./components/dropdown";
-import Search from "./components/search";
 
 import Modals from "@ui/modals";
 import ErrorBoundary from "@ui/errorboundary";
 
 import NoResults from "@ui/blankslates/noresults";
 import EmptySlate from "@ui/blankslates/empty";
-import Web from "@data/web";
-import {buildDirectionOptions, makeBasicButton, getState, saveState, AddonHeader, addonContext} from "./addonshared";
-import Settings from "@stores/settings";
-import Text from "@ui/base/text";
-import {CheckIcon, ChevronRightIcon, FolderIcon, LayoutGridIcon, StoreIcon, StretchHorizontalIcon, XIcon} from "lucide-react";
+import {buildDirectionOptions, makeBasicButton, getState, saveState, AddonHeader} from "./addonshared";
+import {CheckIcon, FolderIcon, LayoutGridIcon, SearchIcon, StretchHorizontalIcon, XIcon} from "lucide-react";
 import {useStateFromStores} from "@ui/hooks";
 import {type Addon} from "@modules/addonmanager";
 import type AddonManager from "@modules/addonmanager"; // eslint-disable-line no-duplicate-imports
 import type {Plugin} from "@modules/pluginmanager";
-import type {ChangeEvent, MouseEvent, ReactNode} from "react";
-
+import type {MouseEvent, ReactNode} from "react";
 
 
 type ViewTypes = "grid" | "list";
 type SortTypes = "name" | "author" | "version" | "added" | "modified" | "isEnabled";
+type EnabledFilter = "all" | "enabled" | "disabled";
 
 const buildSortOptions = () => ([
     {label: t("Addons.name"), value: "name"},
@@ -44,15 +40,9 @@ function openFolder(folder: string) {
 }
 
 function Blankslate({type, folder}: {type: "plugin" | "theme"; folder: string;}) {
-    // TODO: doggy update context type as needed
-    const {toggleStore} = React.useContext(addonContext) as {title: string; toggleStore(): void;};
-    const storeEnabled = Settings.get("settings", "store", "bdAddonStore");
-    const message = t("Addons.blankSlateMessage", {link: Web.pages[`${type}s`], context: type}).toString();
-    const onClick = storeEnabled ? toggleStore : () => openFolder(folder);
-    const buttonKey = storeEnabled ? "Addons.openStore" : "Addons.openFolder";
-    return <EmptySlate title={t("Addons.blankSlateHeader", {context: type})} message={storeEnabled ? "" : message}>
-        <Button size={Button.Sizes.LARGE} onClick={onClick}>
-            {t(buttonKey, {context: type})}
+    return <EmptySlate title={t("Addons.blankSlateHeader", {context: type})} message={""}>
+        <Button size={Button.Sizes.LARGE} onClick={() => openFolder(folder)}>
+            {t("Addons.openFolder", {context: type})}
         </Button>
     </EmptySlate>;
 }
@@ -76,15 +66,7 @@ function confirmDelete(addon: Addon) {
     });
 }
 
-/**
- * @param {function} action
- * @param {string} type
- * @returns
- */
 function confirmEnable(action: () => void, type: string) {
-    /**
-     * @param {MouseEvent} event
-     */
     return function (event: MouseEvent) {
         if (event.shiftKey) return action();
         Modals.showConfirmationModal(t("Modals.confirmAction"), t("Addons.enableAllWarning", {context: type.toLocaleLowerCase()}), {
@@ -96,42 +78,146 @@ function confirmEnable(action: () => void, type: string) {
     };
 }
 
-function StoreCard() {
-    // TODO: doggy update context type as needed
-    const {toggleStore, store} = React.useContext(addonContext) as {toggleStore(): void; store: AddonManager;};
+function editDistance(a: string, b: string): number {
+    const prev = Array.from({length: b.length + 1}, (_, i) => i);
+    for (let i = 0; i < a.length; i++) {
+        const curr = new Array(b.length + 1);
+        curr[0] = i + 1;
+        for (let j = 0; j < b.length; j++) {
+            curr[j + 1] = a[i] === b[j] ? prev[j] : 1 + Math.min(prev[j], prev[j + 1], curr[j]);
+        }
+        for (let j = 0; j <= b.length; j++) prev[j] = curr[j];
+    }
+    return prev[b.length];
+}
 
-    if (!Settings.get("settings", "store", "bdAddonStore")) return;
+function fuzzyMatch(haystack: string, needle: string): boolean {
+    const h = haystack.toLocaleLowerCase();
+    const n = needle.toLocaleLowerCase().trim();
+    if (!n) return true;
+
+    if (h.includes(n)) return true;
+
+    let hi = 0, ni = 0;
+    while (hi < h.length && ni < n.length) {
+        if (h[hi] === n[ni]) ni++;
+        hi++;
+    }
+    if (ni === n.length) return true;
+
+    if (n.length < 4) return false;
+    const maxErrors = Math.floor(n.length / 4);
+    for (let start = 0; start <= h.length - n.length + maxErrors; start++) {
+        const sub = h.slice(start, start + n.length + maxErrors);
+        if (sub.length >= n.length - maxErrors && editDistance(sub, n) <= maxErrors) return true;
+    }
+    return false;
+}
+
+function PluginSearchBar({query, onQueryChange, enabledFilter, onFilterChange}: {
+    query: string;
+    onQueryChange(v: string): void;
+    enabledFilter: EnabledFilter;
+    onFilterChange(v: EnabledFilter): void;
+}) {
+    const inputRef = React.useRef<HTMLInputElement>(null);
+
+    const filterButtons: {label: string; value: EnabledFilter;}[] = [
+        {label: "Alle", value: "all"},
+        {label: "Aktiviert", value: "enabled"},
+        {label: "Deaktiviert", value: "disabled"},
+    ];
 
     return (
-        <div
-            className="bd-store-card"
-            onClick={toggleStore}
-        >
-            <div className="bd-store-card-icon">
-                <StoreIcon size="24px" />
+        <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            padding: "10px 0",
+            marginBottom: "4px",
+        }}>
+            <div style={{
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                background: "var(--input-background, #1e1f22)",
+                border: "1px solid var(--input-border, #3f4147)",
+                borderRadius: "6px",
+                padding: "0 10px",
+                height: "36px",
+                gap: "8px",
+            }}>
+                <SearchIcon size="16px" style={{color: "var(--text-muted)", flexShrink: 0}} />
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={query}
+                    onChange={e => onQueryChange(e.currentTarget.value)}
+                    placeholder={"Plugin suchen..."}
+                    maxLength={50}
+                    style={{
+                        flex: 1,
+                        background: "none",
+                        border: "none",
+                        outline: "none",
+                        color: "var(--text-normal)",
+                        fontSize: "14px",
+                        fontFamily: "inherit",
+                    }}
+                />
+                {query && (
+                    <button
+                        onClick={() => { onQueryChange(""); inputRef.current?.focus(); }}
+                        style={{
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            color: "var(--text-muted)",
+                            display: "flex",
+                            alignItems: "center",
+                            padding: 0,
+                            flexShrink: 0,
+                        }}
+                    >
+                        <XIcon size="14px" />
+                    </button>
+                )}
             </div>
-            <div className="bd-store-card-body">
-                <Text color={Text.Colors.HEADER_PRIMARY} className="bd-store-card-title">{t("Addons.openStore", {context: store.prefix})}</Text>
-                <Text color={Text.Colors.HEADER_SECONDARY} className="bd-store-card-description">{t("Addons.storeMessage", {context: store.prefix})}</Text>
-            </div>
-            <div className="bd-store-card-caret">
-                <ChevronRightIcon size="24px" />
+            <div style={{display: "flex", gap: "4px", flexShrink: 0}}>
+                {filterButtons.map(btn => (
+                    <button
+                        key={btn.value}
+                        onClick={() => onFilterChange(btn.value)}
+                        style={{
+                            padding: "6px 12px",
+                            borderRadius: "6px",
+                            border: "none",
+                            cursor: "pointer",
+                            fontSize: "13px",
+                            fontWeight: 600,
+                            transition: "background 0.15s, color 0.15s",
+                            background: enabledFilter === btn.value
+                                ? "var(--brand-experiment, #5865f2)"
+                                : "var(--background-modifier-hover, #3f4147)",
+                            color: enabledFilter === btn.value
+                                ? "#fff"
+                                : "var(--text-normal)",
+                        }}
+                    >
+                        {btn.label}
+                    </button>
+                ))}
             </div>
         </div>
     );
 }
 
-/**
- * @param {object} props
- * @param {import("@modules/addonmanager").default} props.store
- * @returns
- */
 export default function AddonList({store}: {store: AddonManager;}) {
     const [query, setQuery] = useState("");
+    const [enabledFilter, setEnabledFilter] = useState<EnabledFilter>("all");
     const [sort, setSort] = useState<ReturnType<typeof buildSortOptions>[number]["value"]>(getState.bind(null, store.prefix, "sort", "name"));
     const [ascending, setAscending] = useState(getState.bind(null, store.prefix, "ascending", true));
     const [view, setView] = useState<ViewTypes>(getState.bind(null, store.prefix, "view", "list"));
-
 
     const addonList = useStateFromStores(store, () => store.addonList.concat(), [store], true);
     const addonState = useStateFromStores(store, () => Object.assign({}, store.state), [store], true);
@@ -166,7 +252,6 @@ export default function AddonList({store}: {store: AddonManager;}) {
         setSort(value);
     }, [store.prefix]);
 
-    const search = useCallback((e: ChangeEvent<HTMLInputElement>) => setQuery(e.currentTarget.value.toLocaleLowerCase()), []);
     const triggerEdit = useCallback((id: string) => store.editAddon?.(id), [store]);
     const triggerDelete = useCallback(async (id: string) => {
         const addon = addonList.find(a => a.id == id)!;
@@ -190,14 +275,19 @@ export default function AddonList({store}: {store: AddonManager;}) {
 
         if (!ascending) sorted.reverse();
 
-        if (query) {
+        if (enabledFilter !== "all") {
             sorted = sorted.filter(addon => {
-                let matches = addon.name.toLocaleLowerCase().includes(query);
-                matches = matches || addon.author.toLocaleLowerCase().includes(query);
-                matches = matches || addon.description.toLocaleLowerCase().includes(query);
-                if (!matches) return false;
-                return true;
+                const isEnabled = !!addonState[addon.id];
+                return enabledFilter === "enabled" ? isEnabled : !isEnabled;
             });
+        }
+
+        if (query.trim()) {
+            sorted = sorted.filter(addon =>
+                fuzzyMatch(addon.name, query) ||
+                fuzzyMatch(addon.author, query) ||
+                fuzzyMatch(addon.description, query)
+            );
         }
 
         return sorted.map(addon => {
@@ -207,16 +297,14 @@ export default function AddonList({store}: {store: AddonManager;}) {
                 <AddonCard store={store} disabled={addon.partial} type={store.prefix as "plugin" | "theme"} editAddon={() => triggerEdit(addon.id)} deleteAddon={() => triggerDelete(addon.id)} key={addon.id} addon={addon} onChange={onChange} enabled={addonState[addon.id]} hasSettings={hasSettings} getSettingsPanel={getSettings ? getSettings : undefined} />
             </ErrorBoundary>;
         });
-    }, [store, addonList, addonState, onChange, triggerDelete, triggerEdit, query, ascending, sort]);
+    }, [store, addonList, addonState, onChange, triggerDelete, triggerEdit, query, enabledFilter, ascending, sort]);
 
     const hasAddonsInstalled = addonList.length !== 0;
-    const isSearching = !!query;
+    const isSearching = !!query.trim() || enabledFilter !== "all";
     const hasResults = renderedCards.length !== 0;
 
     return [
-        <AddonHeader count={renderedCards.length} searching={isSearching}>
-            <Search onChange={search} placeholder={`${t("Addons.search", {count: renderedCards.length, context: store.prefix})}...`} />
-        </AddonHeader>,
+        <AddonHeader count={renderedCards.length} searching={isSearching} />,
         <div className={"bd-controls bd-addon-controls"}>
             <div className="bd-controls-basic">
                 {makeBasicButton(t("Addons.openFolder", {context: store.prefix}), <FolderIcon size="20px" />, openFolder.bind(null, store.addonFolder), "folder")}
@@ -240,7 +328,12 @@ export default function AddonList({store}: {store: AddonManager;}) {
                 </div>
             </div>
         </div>,
-        <StoreCard />,
+        <PluginSearchBar
+            query={query}
+            onQueryChange={setQuery}
+            enabledFilter={enabledFilter}
+            onFilterChange={setEnabledFilter}
+        />,
         !hasAddonsInstalled && <Blankslate type={store.prefix as "plugin" | "theme"} folder={store.addonFolder} />,
         isSearching && !hasResults && hasAddonsInstalled && <NoResults />,
         hasAddonsInstalled && <div key="addonList" className={"bd-addon-list" + (view == "grid" ? " bd-grid-view" : "")}>{renderedCards}</div>
