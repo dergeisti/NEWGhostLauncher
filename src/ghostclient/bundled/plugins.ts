@@ -1015,8 +1015,8 @@ module.exports = GhostDoubleClickToEdit;`
         content: `/**
  * @name GhostClientLogo
  * @author GhostClient
- * @description Ersetzt das GhostClient-Logo und Lade-Icon mit einem eigenen Bild. Einstellungen \u00f6ffnen, um den Logo Manager zu starten.
- * @version 1.0.0
+ * @description Ersetzt das GhostClient-Logo und Lade-Icon mit einem eigenen Bild. Gr\u00f6\u00dfe anpassbar. Update Src exportiert die Dateien als ZIP.
+ * @version 1.1.0
  * @source https://github.com/ghostclient
  */
 
@@ -1026,58 +1026,158 @@ const { useState, useEffect, useRef, useCallback } = _R;
 
 const PLUGIN_ID = "GhostClientLogo";
 const DATA_KEY = "customLogoDataUrl";
+const DATA_KEY_LOGO_SIZE = "logoSize";
+const DATA_KEY_LOADING_SIZE = "loadingSize";
 
-function applyCustomLogo(url) {
-    BdApi.DOM.addStyle(PLUGIN_ID + "_css",
-        "#bd-loading-icon { background-image: url('" + url + "') !important; } " +
-        "img.lucide-ghostclient { content: url('" + url + "') !important; }"
+// Apply custom logo via CSS only — removing CSS cleanly restores original without touching img.src
+function applyLogo(url, logoSize, loadingSize) {
+    var ls = logoSize || 24;
+    var lis = loadingSize || 20;
+    BdApi.DOM.addStyle(PLUGIN_ID + "_logo",
+        "img.lucide-ghostclient { content: url('" + url + "') !important; width: " + ls + "px !important; height: " + ls + "px !important; } " +
+        "#bd-loading-icon { background-image: url('" + url + "') !important; width: " + lis + "px !important; height: " + lis + "px !important; }"
     );
-    document.querySelectorAll("img.lucide-ghostclient").forEach(function(img) { img.src = url; });
 }
 
-function removeCustomLogo() {
-    BdApi.DOM.removeStyle(PLUGIN_ID + "_css");
+function applySize(logoSize, loadingSize) {
+    var ls = logoSize || 24;
+    var lis = loadingSize || 20;
+    BdApi.DOM.addStyle(PLUGIN_ID + "_size",
+        "img.lucide-ghostclient { width: " + ls + "px !important; height: " + ls + "px !important; } " +
+        "#bd-loading-icon { width: " + lis + "px !important; height: " + lis + "px !important; }"
+    );
 }
+
+function removeLogo() { BdApi.DOM.removeStyle(PLUGIN_ID + "_logo"); }
+function removeSize() { BdApi.DOM.removeStyle(PLUGIN_ID + "_size"); }
 
 function processImage(dataUrl) {
     return new Promise(function(resolve) {
-        const img = new Image();
+        var img = new Image();
         img.onload = function() {
-            const size = 256;
-            const canvas = document.createElement("canvas");
-            canvas.width = size;
-            canvas.height = size;
-            const ctx = canvas.getContext("2d");
-            const side = Math.min(img.width, img.height);
-            const sx = (img.width - side) / 2;
-            const sy = (img.height - side) / 2;
-            ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+            var size = 256;
+            var canvas = document.createElement("canvas");
+            canvas.width = size; canvas.height = size;
+            var ctx = canvas.getContext("2d");
+            var side = Math.min(img.width, img.height);
+            ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
             resolve(canvas.toDataURL("image/png"));
         };
         img.src = dataUrl;
     });
 }
 
-function GhostLogoUI({ onClose }) {
-    const [state, setState] = useState({ phase: "upload", uploaded: null, generated: null, dragging: false, msg: "" });
-    const [pos, setPos] = useState({ x: Math.max(0, window.innerWidth / 2 - 220), y: Math.max(0, window.innerHeight / 2 - 240) });
-    const isDragging = useRef(false);
-    const dragOffset = useRef({ x: 0, y: 0 });
-    const winRef = useRef(null);
-    const fileInputRef = useRef(null);
-    const merge = useCallback(function(obj) { setState(function(p) { return Object.assign({}, p, obj); }); }, []);
+// --- Minimal ZIP writer (store, no compression) ---
+function crc32(data) {
+    var crc = 0xFFFFFFFF;
+    for (var i = 0; i < data.length; i++) {
+        crc ^= data[i];
+        for (var j = 0; j < 8; j++) crc = (crc & 1) ? (0xEDB88320 ^ (crc >>> 1)) : (crc >>> 1);
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function makeZip(files) {
+    var enc = new TextEncoder();
+    var locals = [];
+    var centrals = [];
+    var offset = 0;
+    for (var fi = 0; fi < files.length; fi++) {
+        var f = files[fi];
+        var nb = enc.encode(f.name);
+        var d = f.data;
+        var crc = crc32(d);
+        var sz = d.length;
+        var local = new Uint8Array(30 + nb.length + sz);
+        var lv = new DataView(local.buffer);
+        lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0, true);
+        lv.setUint16(8, 0, true); lv.setUint16(10, 0, true); lv.setUint16(12, 0, true);
+        lv.setUint32(14, crc, true); lv.setUint32(18, sz, true); lv.setUint32(22, sz, true);
+        lv.setUint16(26, nb.length, true); lv.setUint16(28, 0, true);
+        local.set(nb, 30); local.set(d, 30 + nb.length);
+        locals.push({ bytes: local, nb: nb, crc: crc, sz: sz, off: offset });
+        offset += local.length;
+    }
+    var centralSize = 0;
+    for (var ci = 0; ci < locals.length; ci++) {
+        var h = locals[ci];
+        var c = new Uint8Array(46 + h.nb.length);
+        var cv = new DataView(c.buffer);
+        cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
+        cv.setUint16(8, 0, true); cv.setUint16(10, 0, true); cv.setUint16(12, 0, true); cv.setUint16(14, 0, true);
+        cv.setUint32(16, h.crc, true); cv.setUint32(20, h.sz, true); cv.setUint32(24, h.sz, true);
+        cv.setUint16(28, h.nb.length, true); cv.setUint16(30, 0, true); cv.setUint16(32, 0, true);
+        cv.setUint16(34, 0, true); cv.setUint16(36, 0, true); cv.setUint32(38, 0, true); cv.setUint32(42, h.off, true);
+        c.set(h.nb, 46);
+        centrals.push(c);
+        centralSize += c.length;
+    }
+    var eocd = new Uint8Array(22);
+    var ev = new DataView(eocd.buffer);
+    ev.setUint32(0, 0x06054b50, true); ev.setUint16(4, 0, true); ev.setUint16(6, 0, true);
+    ev.setUint16(8, locals.length, true); ev.setUint16(10, locals.length, true);
+    ev.setUint32(12, centralSize, true); ev.setUint32(16, offset, true); ev.setUint16(20, 0, true);
+    var result = new Uint8Array(offset + centralSize + 22);
+    var pos = 0;
+    for (var li = 0; li < locals.length; li++) { result.set(locals[li].bytes, pos); pos += locals[li].bytes.length; }
+    for (var ri = 0; ri < centrals.length; ri++) { result.set(centrals[ri], pos); pos += centrals[ri].length; }
+    result.set(eocd, pos);
+    return result;
+}
+
+function dataUrlToBytes(dataUrl) {
+    var b64 = dataUrl.split(",")[1];
+    var bin = atob(b64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+}
+
+function downloadZip(zipBytes) {
+    var blob = new Blob([zipBytes], { type: "application/zip" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = "ghostclient-logos.zip";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
+}
+
+// --- UI ---
+function GhostLogoUI(props) {
+    var onClose = props.onClose;
+    var initLoaded = BdApi.Data.load(PLUGIN_ID, DATA_KEY) || null;
+    var initLogoSize = BdApi.Data.load(PLUGIN_ID, DATA_KEY_LOGO_SIZE) || 24;
+    var initLoadingSize = BdApi.Data.load(PLUGIN_ID, DATA_KEY_LOADING_SIZE) || 20;
+
+    var stateArr = useState({
+        phase: initLoaded ? "applied" : "upload",
+        uploaded: null,
+        generated: initLoaded,
+        dragging: false,
+        msg: "",
+        zipReady: false,
+        logoSize: initLogoSize,
+        loadingSize: initLoadingSize
+    });
+    var state = stateArr[0];
+    var setState = stateArr[1];
+
+    var posArr = useState({ x: Math.max(0, window.innerWidth / 2 - 235), y: Math.max(0, window.innerHeight / 2 - 300) });
+    var pos = posArr[0]; var setPos = posArr[1];
+
+    var isDragging = useRef(false);
+    var dragOffset = useRef({ x: 0, y: 0 });
+    var winRef = useRef(null);
+    var fileRef = useRef(null);
+
+    var merge = useCallback(function(obj) { setState(function(p) { return Object.assign({}, p, obj); }); }, []);
 
     useEffect(function() {
-        const saved = BdApi.Data.load(PLUGIN_ID, DATA_KEY);
-        if (saved) merge({ phase: "applied", generated: saved });
-    }, []);
-
-    useEffect(function() {
-        const onMove = function(ev) {
+        function onMove(ev) {
             if (!isDragging.current) return;
             setPos({ x: ev.clientX - dragOffset.current.x, y: ev.clientY - dragOffset.current.y });
-        };
-        const onUp = function() { isDragging.current = false; };
+        }
+        function onUp() { isDragging.current = false; }
         document.addEventListener("mousemove", onMove, true);
         document.addEventListener("mouseup", onUp);
         return function() {
@@ -1086,197 +1186,232 @@ function GhostLogoUI({ onClose }) {
         };
     }, []);
 
-    const startDrag = useCallback(function(ev) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        const r = winRef.current.getBoundingClientRect();
+    function startDrag(ev) {
+        ev.preventDefault(); ev.stopPropagation();
+        var r = winRef.current.getBoundingClientRect();
         dragOffset.current = { x: ev.clientX - r.left, y: ev.clientY - r.top };
         isDragging.current = true;
-    }, []);
+    }
 
     function handleFile(file) {
         if (!file || !file.type.startsWith("image/")) return;
-        const reader = new FileReader();
-        reader.onload = function(ev) { merge({ phase: "preview", uploaded: ev.target.result }); };
+        var reader = new FileReader();
+        reader.onload = function(ev) { merge({ phase: "preview", uploaded: ev.target.result, zipReady: false }); };
         reader.readAsDataURL(file);
     }
 
     function handleGenerate() {
         if (!state.uploaded) return;
-        processImage(state.uploaded).then(function(url) { merge({ phase: "ready", generated: url }); });
+        processImage(state.uploaded).then(function(url) { merge({ phase: "ready", generated: url, zipReady: false }); });
     }
 
     function handleApply() {
-        BdApi.Data.save(PLUGIN_ID, DATA_KEY, state.generated);
-        applyCustomLogo(state.generated);
+        var url = state.generated;
+        BdApi.Data.save(PLUGIN_ID, DATA_KEY, url);
+        BdApi.Data.save(PLUGIN_ID, DATA_KEY_LOGO_SIZE, state.logoSize);
+        BdApi.Data.save(PLUGIN_ID, DATA_KEY_LOADING_SIZE, state.loadingSize);
+        removeSize();
+        applyLogo(url, state.logoSize, state.loadingSize);
         merge({ phase: "applied", msg: "\u2705 Logo erfolgreich aktualisiert!" });
         setTimeout(function() { merge({ msg: "" }); }, 3000);
     }
 
     function handleReset() {
         BdApi.Data.save(PLUGIN_ID, DATA_KEY, null);
-        removeCustomLogo();
-        merge({ phase: "upload", uploaded: null, generated: null, msg: "\uD83D\uDD04 Standard-Logo wiederhergestellt!" });
+        removeLogo();
+        applySize(state.logoSize, state.loadingSize);
+        merge({ phase: "upload", uploaded: null, generated: null, zipReady: false, msg: "\uD83D\uDD04 Standard-Logo wiederhergestellt!" });
         setTimeout(function() { merge({ msg: "" }); }, 3000);
+    }
+
+    function handleUpdateSrc() {
+        var url = state.generated;
+        if (!url) {
+            merge({ msg: "\u26A0\uFE0F Kein Logo generiert oder geladen." });
+            setTimeout(function() { merge({ msg: "" }); }, 3000);
+            return;
+        }
+        try {
+            var bytes = dataUrlToBytes(url);
+            var zip = makeZip([{ name: "src/ghostclient/ui/ghost-logo.png", data: bytes }]);
+            downloadZip(zip);
+            merge({ zipReady: true, msg: "\u2705 ZIP wird heruntergeladen!" });
+            setTimeout(function() { merge({ msg: "" }); }, 3000);
+        } catch (err) {
+            merge({ msg: "\u274C Fehler: " + (err.message || err) });
+            setTimeout(function() { merge({ msg: "" }); }, 4000);
+        }
+    }
+
+    function handleSizeChange(key, val) {
+        var v = parseInt(val, 10);
+        var upd = {};
+        upd[key] = v;
+        merge(upd);
+        var logoSize = key === "logoSize" ? v : state.logoSize;
+        var loadingSize = key === "loadingSize" ? v : state.loadingSize;
+        BdApi.Data.save(PLUGIN_ID, DATA_KEY_LOGO_SIZE, logoSize);
+        BdApi.Data.save(PLUGIN_ID, DATA_KEY_LOADING_SIZE, loadingSize);
+        var saved = BdApi.Data.load(PLUGIN_ID, DATA_KEY);
+        if (saved) {
+            removeLogo();
+            applyLogo(saved, logoSize, loadingSize);
+        } else {
+            applySize(logoSize, loadingSize);
+        }
+    }
+
+    function btn(label, bg, color, onClick) {
+        return _e("button", {
+            onClick: onClick,
+            style: { width: "100%", padding: "10px", border: "none", borderRadius: "6px", fontSize: "13px", fontWeight: 700, color: color || "#fff", background: bg, cursor: "pointer", marginBottom: "8px" }
+        }, label);
+    }
+
+    function sizeSlider(label, key, min, max, value) {
+        return _e("div", { style: { marginBottom: "10px" } },
+            _e("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: "4px" } },
+                _e("span", { style: { fontSize: "12px", color: "var(--text-muted)", fontWeight: 600 } }, label),
+                _e("span", { style: { fontSize: "12px", color: "var(--header-primary)", fontWeight: 700 } }, value + "px")
+            ),
+            _e("input", {
+                type: "range", min: min, max: max, value: value,
+                onChange: function(ev) { handleSizeChange(key, ev.target.value); },
+                style: { width: "100%", accentColor: "#7c3aed", cursor: "pointer" }
+            })
+        );
+    }
+
+    function sizeSection() {
+        return _e("div", { style: { background: "var(--background-secondary,#2b2d31)", borderRadius: "8px", padding: "12px", marginBottom: "10px" } },
+            _e("div", { style: { fontSize: "11px", fontWeight: 700, color: "var(--header-secondary)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "10px" } }, "Gr\u00f6\u00dfe anpassen"),
+            sizeSlider("GhostClient Logo", "logoSize", 12, 64, state.logoSize),
+            sizeSlider("Lade-Icon", "loadingSize", 10, 48, state.loadingSize)
+        );
     }
 
     function uploadZone(mini) {
         return _e("div", {
             style: {
                 border: "2px dashed " + (state.dragging ? "#7c3aed" : "var(--background-modifier-accent,#3f4147)"),
-                borderRadius: "8px",
-                padding: mini ? "14px" : "28px 16px",
-                textAlign: "center",
-                cursor: "pointer",
-                marginBottom: "10px",
-                transition: "all 0.2s",
-                background: state.dragging ? "rgba(124,58,237,0.08)" : "var(--background-secondary,#2b2d31)",
+                borderRadius: "8px", padding: mini ? "10px" : "28px 16px",
+                textAlign: "center", cursor: "pointer", marginBottom: "10px",
+                background: state.dragging ? "rgba(124,58,237,0.08)" : "var(--background-secondary,#2b2d31)", transition: "all 0.2s"
             },
-            onClick: function() { if (fileInputRef.current) fileInputRef.current.click(); },
+            onClick: function() { if (fileRef.current) fileRef.current.click(); },
             onDragOver: function(ev) { ev.preventDefault(); merge({ dragging: true }); },
             onDragLeave: function() { merge({ dragging: false }); },
-            onDrop: function(ev) { ev.preventDefault(); merge({ dragging: false }); handleFile(ev.dataTransfer.files[0]); },
+            onDrop: function(ev) { ev.preventDefault(); merge({ dragging: false }); handleFile(ev.dataTransfer.files[0]); }
         },
-            _e("input", {
-                ref: fileInputRef, type: "file", accept: "image/*",
-                style: { display: "none" },
-                onChange: function(ev) { handleFile(ev.target.files[0]); }
-            }),
-            _e("div", { style: { fontSize: mini ? "22px" : "32px", marginBottom: "6px" } }, "\u2B06\uFE0F"),
-            _e("div", { style: { fontWeight: 600, fontSize: mini ? "12px" : "14px", color: "var(--text-normal)" } }, "Lade Bild Datei hoch"),
-            !mini && _e("div", { style: { fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" } }, "Klicken oder Bild hierher ziehen")
+            _e("input", { ref: fileRef, type: "file", accept: "image/*", style: { display: "none" }, onChange: function(ev) { handleFile(ev.target.files[0]); } }),
+            _e("div", { style: { fontSize: mini ? "20px" : "32px", marginBottom: "4px" } }, "\u2B06\uFE0F"),
+            _e("div", { style: { fontWeight: 600, fontSize: mini ? "12px" : "14px", color: "var(--text-normal)" } }, mini ? "Neues Bild hochladen" : "Bild hochladen"),
+            !mini && _e("div", { style: { fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" } }, "Klicken oder hierher ziehen")
         );
     }
 
-    function actionBtn(label, bg, color, onClick) {
-        return _e("button", {
-            onClick: onClick,
-            style: { width: "100%", padding: "11px", border: "none", borderRadius: "6px", fontSize: "14px", fontWeight: 700, color: color || "#fff", background: bg, cursor: "pointer", marginBottom: "8px" }
-        }, label);
-    }
-
     function imgPreview(url, border, label) {
-        return _e("div", { style: { textAlign: "center", marginBottom: "14px" } },
+        return _e("div", { style: { textAlign: "center", marginBottom: "12px" } },
             _e("img", { src: url, style: { width: "80px", height: "80px", borderRadius: "50%", objectFit: "cover", border: "3px solid " + border } }),
             label && _e("div", { style: { fontSize: "12px", color: "var(--text-muted)", marginTop: "6px", fontWeight: 600 } }, label)
         );
     }
 
-    const phase = state.phase;
+    var phase = state.phase;
 
     return _e("div", {
         ref: winRef,
-        style: {
-            position: "fixed",
-            left: pos.x + "px",
-            top: pos.y + "px",
-            width: "440px",
-            background: "var(--background-primary,#313338)",
-            borderRadius: "10px",
-            boxShadow: "0 8px 40px rgba(0,0,0,0.65)",
-            zIndex: 10000,
-            overflow: "hidden",
-            pointerEvents: "all",
-        }
+        style: { position: "fixed", left: pos.x + "px", top: pos.y + "px", width: "460px", background: "var(--background-primary,#313338)", borderRadius: "10px", boxShadow: "0 8px 40px rgba(0,0,0,0.65)", zIndex: 10000, overflow: "hidden", pointerEvents: "all" }
     },
         _e("div", {
             onMouseDown: startDrag,
-            style: {
-                display: "flex", alignItems: "center", padding: "0 14px",
-                height: "44px", background: "var(--background-secondary,#2b2d31)",
-                borderBottom: "1px solid var(--background-modifier-accent,#3f4147)",
-                cursor: "grab", userSelect: "none",
-            }
+            style: { display: "flex", alignItems: "center", padding: "0 14px", height: "44px", background: "var(--background-secondary,#2b2d31)", borderBottom: "1px solid var(--background-modifier-accent,#3f4147)", cursor: "grab", userSelect: "none" }
         },
             _e("span", { style: { width: "8px", height: "8px", borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#4f46e5)", display: "inline-block", marginRight: "10px" } }),
             _e("span", { style: { fontWeight: 700, fontSize: "14px", color: "var(--header-primary)", flex: 1 } }, "GhostClient \u00b7 Logo Manager"),
-            _e("div", {
-                onMouseDown: function(ev) { ev.stopPropagation(); },
-                onClick: onClose,
-                style: { width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "4px", cursor: "pointer", color: "var(--text-muted)", fontSize: "20px" }
-            }, "\u00d7")
+            _e("div", { onMouseDown: function(ev) { ev.stopPropagation(); }, onClick: onClose, style: { width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "4px", cursor: "pointer", color: "var(--text-muted)", fontSize: "20px" } }, "\u00d7")
         ),
-        _e("div", { style: { padding: "20px" } },
-            phase === "upload" && uploadZone(false),
+        _e("div", { style: { padding: "18px", maxHeight: "calc(90vh - 44px)", overflowY: "auto" } },
+
+            phase === "upload" && _e("div", null,
+                uploadZone(false),
+                sizeSection()
+            ),
 
             phase === "preview" && _e("div", null,
-                uploadZone(false),
-                state.uploaded && imgPreview(state.uploaded, "#7c3aed", "Bild geladen \u2713"),
-                actionBtn("\u2728 Generieren", "linear-gradient(135deg,#7c3aed,#4f46e5)", "#fff", handleGenerate)
+                uploadZone(true),
+                state.uploaded && imgPreview(state.uploaded, "#7c3aed", "Hochgeladenes Bild"),
+                sizeSection(),
+                btn("\u2728 Generieren", "linear-gradient(135deg,#7c3aed,#4f46e5)", "#fff", handleGenerate)
             ),
 
             phase === "ready" && _e("div", null,
                 imgPreview(state.generated, "#7c3aed", "Logo bereit!"),
-                actionBtn("\u2705 Update Logo", "#3ba55d", "#fff", handleApply),
-                actionBtn("\uD83D\uDD04 Reset auf Default", "var(--background-modifier-hover,#3f4147)", "var(--text-normal)", handleReset)
+                sizeSection(),
+                btn("\u2705 Apply Logo", "#3ba55d", "#fff", handleApply),
+                btn("\uD83D\uDCE6 Update Src", "#5865f2", "#fff", handleUpdateSrc),
+                btn("\uD83D\uDD04 Reset auf Default", "var(--background-modifier-hover,#3f4147)", "var(--text-normal)", handleReset)
             ),
 
             phase === "applied" && _e("div", null,
                 state.generated && imgPreview(state.generated, "#3ba55d", "\u2705 Aktives Custom-Logo"),
                 uploadZone(true),
-                actionBtn("\uD83D\uDD04 Reset auf Default", "var(--background-modifier-hover,#3f4147)", "var(--text-normal)", handleReset)
+                sizeSection(),
+                btn("\uD83D\uDCE6 Update Src", "#5865f2", "#fff", handleUpdateSrc),
+                btn("\uD83D\uDD04 Reset auf Default", "var(--background-modifier-hover,#3f4147)", "var(--text-normal)", handleReset)
             ),
 
-            state.msg && _e("div", {
-                style: { marginTop: "4px", padding: "10px", background: "var(--background-secondary)", borderRadius: "6px", fontSize: "13px", textAlign: "center", color: "var(--text-normal)" }
-            }, state.msg),
+            state.msg && _e("div", { style: { marginBottom: "8px", padding: "10px", background: "var(--background-secondary)", borderRadius: "6px", fontSize: "13px", textAlign: "center", color: "var(--text-normal)" } }, state.msg),
 
-            _e("div", {
-                style: { marginTop: "10px", padding: "10px 12px", background: "var(--background-secondary,#2b2d31)", borderRadius: "6px", fontSize: "12px", color: "var(--text-muted)", lineHeight: "1.5" }
-            }, "Das Logo wird sofort \u00fcbernommen und beim n\u00e4chsten Start automatisch geladen.")
+            _e("div", { style: { padding: "10px 12px", background: "var(--background-secondary,#2b2d31)", borderRadius: "6px", fontSize: "12px", color: "var(--text-muted)", lineHeight: "1.5" } },
+                "Logo wird sofort \u00fcbernommen. Update Src erstellt eine ZIP f\u00fcr deinen Projektordner (src/ghostclient/ui/)."
+            )
         )
     );
 }
 
 class GhostClientLogo {
-    constructor() {
-        this._div = null;
-        this._root = null;
-        this._obs = null;
-        this._saved = null;
-    }
+    constructor() { this._div = null; this._root = null; }
 
     start() {
-        this._saved = BdApi.Data.load(PLUGIN_ID, DATA_KEY) || null;
-        if (this._saved) {
-            applyCustomLogo(this._saved);
-            this._obs = new MutationObserver(() => {
-                if (!this._saved) return;
-                document.querySelectorAll("img.lucide-ghostclient").forEach(function(img) {
-                    if (img.src !== this._saved) img.src = this._saved;
-                }.bind(this));
-            });
-            this._obs.observe(document.body, { childList: true, subtree: true });
+        var logo = BdApi.Data.load(PLUGIN_ID, DATA_KEY);
+        var logoSize = BdApi.Data.load(PLUGIN_ID, DATA_KEY_LOGO_SIZE) || 24;
+        var loadingSize = BdApi.Data.load(PLUGIN_ID, DATA_KEY_LOADING_SIZE) || 20;
+        if (logo) {
+            applyLogo(logo, logoSize, loadingSize);
+        } else {
+            applySize(logoSize, loadingSize);
         }
     }
 
     stop() {
-        if (this._obs) { this._obs.disconnect(); this._obs = null; }
-        removeCustomLogo();
+        removeLogo();
+        removeSize();
         this._closeWindow();
     }
 
     getSettingsPanel() {
-        const div = document.createElement("div");
+        var div = document.createElement("div");
         div.style.cssText = "padding: 16px;";
-        const btn = document.createElement("button");
-        btn.textContent = "\uD83C\uDFA8 Logo Manager \u00f6ffnen";
-        btn.style.cssText = "padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #7c3aed, #4f46e5); width: 100%;";
-        btn.onclick = () => this._openWindow();
-        div.appendChild(btn);
+        var gbtn = document.createElement("button");
+        gbtn.textContent = "\uD83C\uDFA8 Logo Manager \u00f6ffnen";
+        gbtn.style.cssText = "padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #7c3aed, #4f46e5); width: 100%;";
+        var self = this;
+        gbtn.onclick = function() { self._openWindow(); };
+        div.appendChild(gbtn);
         return div;
     }
 
     _openWindow() {
         if (this._div) return;
-        const div = document.createElement("div");
+        var div = document.createElement("div");
         div.id = "gc-logo-manager-root";
         div.style.cssText = "position: fixed; inset: 0; z-index: 9999; pointer-events: none;";
         document.body.appendChild(div);
         this._div = div;
-        const root = BdApi.ReactDOM.createRoot(div);
+        var root = BdApi.ReactDOM.createRoot(div);
         this._root = root;
-        const self = this;
+        var self = this;
         root.render(_e(GhostLogoUI, { onClose: function() { self._closeWindow(); } }));
     }
 
