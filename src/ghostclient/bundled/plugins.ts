@@ -939,5 +939,75 @@ module.exports = GhostEmbed;`
   }
 
   module.exports = GhostWebhDeleter;`
+    },
+    {
+        filename: "GhostDoubleClickToEdit.plugin.js",
+        content: `/**
+ * @name GhostDoubleClickToEdit
+ * @author GhostClient
+ * @description Double-click any of your own messages to instantly start editing them.
+ * @version 1.0.0
+ * @source https://github.com/ghostclient
+ */
+
+class GhostDoubleClickToEdit {
+    start() {
+        BdApi.DOM.addStyle("GhostDoubleClickToEdit",
+            "[id^=\\"chat-messages-\\"] [class*=\\"messageContent\\"] { cursor: text; }"
+        );
+
+        this._msgStore  = BdApi.Webpack.getByKeys("getMessage", "getMessages");
+        this._userStore = BdApi.Webpack.getByKeys("getCurrentUser");
+        this._editMod   = BdApi.Webpack.getByKeys("startEditMessage");
+
+        this._handler = (ev) => {
+            try {
+                if (!ev.target.closest("[class*=\\"messageContent\\"]")) return;
+
+                const container = ev.target.closest("[id^=\\"chat-messages-\\"]");
+                if (!container) return;
+
+                const parts = container.id.split("-");
+                if (parts.length < 4) return;
+                const messageId = parts[parts.length - 1];
+                const channelId = parts[parts.length - 2];
+
+                const currentUser = this._userStore && this._userStore.getCurrentUser
+                    ? this._userStore.getCurrentUser()
+                    : null;
+                if (!currentUser) return;
+
+                const message = this._msgStore && this._msgStore.getMessage
+                    ? this._msgStore.getMessage(channelId, messageId)
+                    : null;
+                if (!message) return;
+                if (message.author.id !== currentUser.id) return;
+
+                if (!this._editMod || !this._editMod.startEditMessage) return;
+                this._editMod.startEditMessage(channelId, messageId, message.content);
+
+                ev.preventDefault();
+                ev.stopPropagation();
+            } catch (err) {
+                console.warn("[GhostDoubleClickToEdit] Fehler:", err);
+            }
+        };
+
+        document.addEventListener("dblclick", this._handler, true);
+    }
+
+    stop() {
+        BdApi.DOM.removeStyle("GhostDoubleClickToEdit");
+        if (this._handler) {
+            document.removeEventListener("dblclick", this._handler, true);
+            this._handler = null;
+        }
+        this._msgStore = null;
+        this._userStore = null;
+        this._editMod = null;
+    }
+}
+
+module.exports = GhostDoubleClickToEdit;`
     }
 ];
