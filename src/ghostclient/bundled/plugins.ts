@@ -1422,5 +1422,486 @@ class GhostClientLogo {
 }
 
 module.exports = GhostClientLogo;`
+    },
+    {
+        filename: "GhostGameStatus.plugin.js",
+        content: `/**
+ * @name GhostGameStatus
+ * @author GhostClient
+ * @description Custom Game Activity Status with buttons for your Discord profile.
+ * @version 6.0.0
+ * @source https://github.com/ghostclient
+ */
+
+class GhostGameStatus {
+    constructor() {
+        this._interval = null;
+        this._startTime = null;
+        this._mods = null;
+    }
+    start() {
+        this._startTime = Date.now();
+        this._mods = this._findModules();
+        var s = this._load();
+        this._apply(s);
+        var self = this;
+        this._interval = setInterval(function() {
+            self._apply(self._load());
+        }, 15000);
+    }
+    stop() {
+        if (this._interval) clearInterval(this._interval);
+        this._interval = null;
+        this._clear();
+        this._mods = null;
+    }
+    _load() {
+        var d = { statusType: 0, gameName: 'GhostClient', details: '', gameState: '', timeMode: 'real', customHours: 0, customMinutes: 0, streamUrl: 'https://twitch.tv/ghostclient', appId: '', buttons: [] };
+        var s = BdApi.Data.load('GhostGameStatus', 'settings');
+        if (s) for (var k in s) d[k] = s[k];
+        return d;
+    }
+    _save(s) {
+        BdApi.Data.save('GhostGameStatus', 'settings', s);
+    }
+    _getTs(s) {
+        if (s.timeMode === 'real') return this._startTime || Date.now();
+        return Date.now() - ((s.customHours || 0) * 3600000 + (s.customMinutes || 0) * 60000);
+    }
+    _findModules() {
+        var result = { dispatcher: null, gameStore: null, presenceStore: null, gateway: null, userStore: null };
+
+        try { result.dispatcher = BdApi.Webpack.getByKeys('dispatch', 'subscribe', 'register', { searchExports: true }); } catch(e) {}
+        if (!result.dispatcher) {
+            try { result.dispatcher = BdApi.Webpack.getModule(function(m) { return m && m.dispatch && m.subscribe && m.register; }, { searchExports: true }); } catch(e) {}
+        }
+        if (!result.dispatcher) {
+            try { result.dispatcher = BdApi.Webpack.getModule(function(m) { return m && m.dispatch && m.subscribe; }, { searchExports: true }); } catch(e) {}
+        }
+
+        try { result.gameStore = BdApi.Webpack.getStore('RunningGameStore'); } catch(e) {}
+        if (!result.gameStore) {
+            try { result.gameStore = BdApi.Webpack.getModule(function(m) { return m && m.getRunningGames; }); } catch(e) {}
+        }
+
+        try { result.presenceStore = BdApi.Webpack.getStore('SelfPresenceStore'); } catch(e) {}
+        if (!result.presenceStore) {
+            try { result.presenceStore = BdApi.Webpack.getModule(function(m) { return m && m.getLocalPresence; }); } catch(e) {}
+        }
+
+        try { result.gateway = BdApi.Webpack.getStore('GatewayConnectionStore'); } catch(e) {}
+        if (!result.gateway) {
+            try { result.gateway = BdApi.Webpack.getModule(function(m) { return m && m.getSocket; }); } catch(e) {}
+        }
+
+        try { result.userStore = BdApi.Webpack.getStore('UserStore'); } catch(e) {}
+        if (!result.userStore) {
+            try { result.userStore = BdApi.Webpack.getModule(function(m) { return m && m.getCurrentUser; }); } catch(e) {}
+        }
+
+        return result;
+    }
+    _buildActivity(s) {
+        var ts = this._getTs(s);
+        var gn = s.gameName || 'GhostClient';
+        var act = {
+            name: gn,
+            type: s.statusType || 0,
+            timestamps: { start: ts }
+        };
+        if (s.details) act.details = s.details;
+        if (s.gameState) act.state = s.gameState;
+        if (s.statusType === 1) act.url = s.streamUrl || 'https://twitch.tv/ghostclient';
+        if (s.appId) {
+            act.application_id = s.appId;
+            var validBtns = (s.buttons || []).filter(function(b) { return b && b.label && b.url; });
+            if (validBtns.length > 0) {
+                act.buttons = validBtns.slice(0, 2).map(function(b) { return b.label; });
+                act.metadata = { button_urls: validBtns.slice(0, 2).map(function(b) { return b.url; }) };
+            }
+        }
+        return act;
+    }
+    _apply(s) {
+        if (!this._mods) this._mods = this._findModules();
+        var mods = this._mods;
+        var act = this._buildActivity(s);
+
+        if (mods.dispatcher) {
+            try {
+                mods.dispatcher.dispatch({ type: 'LOCAL_ACTIVITY_UPDATE', activity: act, socketId: 'GhostGameStatus' });
+            } catch(e) { console.error('[GhostGameStatus] LOCAL_ACTIVITY_UPDATE error:', e); }
+
+            if (s.statusType === 0) {
+                try {
+                    var games = [];
+                    if (mods.gameStore && mods.gameStore.getRunningGames) {
+                        var existing = mods.gameStore.getRunningGames();
+                        if (Array.isArray(existing)) {
+                            games = existing.filter(function(g) { return g && g.pid !== 31337; });
+                        }
+                    }
+                    games.push({ id: 'ghostclient-custom', name: act.name, pid: 31337, start: act.timestamps.start });
+                    mods.dispatcher.dispatch({ type: 'RUNNING_GAMES_CHANGE', games: games });
+                } catch(e) { console.error('[GhostGameStatus] RUNNING_GAMES_CHANGE error:', e); }
+            }
+        }
+
+        if (mods.gateway) {
+            try {
+                var socket = mods.gateway.getSocket();
+                if (socket) {
+                    socket.presenceUpdate({ status: 'online', since: 0, activities: [act], afk: false });
+                }
+            } catch(e) { console.error('[GhostGameStatus] Gateway presenceUpdate error:', e); }
+        }
+    }
+    _clear() {
+        if (!this._mods) this._mods = this._findModules();
+        var mods = this._mods;
+
+        if (mods.dispatcher) {
+            try { mods.dispatcher.dispatch({ type: 'LOCAL_ACTIVITY_UPDATE', activity: null, socketId: 'GhostGameStatus' }); } catch(e) {}
+            try { mods.dispatcher.dispatch({ type: 'RUNNING_GAMES_CHANGE', games: [] }); } catch(e) {}
+        }
+        if (mods.gateway) {
+            try {
+                var socket = mods.gateway.getSocket();
+                if (socket) socket.presenceUpdate({ status: 'online', since: 0, activities: [], afk: false });
+            } catch(e) {}
+        }
+    }
+    _runDiag() {
+        var lines = [];
+        var mods = this._findModules();
+        this._mods = mods;
+        var nl = String.fromCharCode(10);
+        lines.push('=== GhostGameStatus v6.0 Diagnose ===');
+        lines.push('');
+        lines.push('FluxDispatcher: ' + (mods.dispatcher ? 'GEFUNDEN' : 'NICHT GEFUNDEN'));
+        if (mods.dispatcher) {
+            var dk = Object.keys(mods.dispatcher).filter(function(k) { return typeof mods.dispatcher[k] === 'function'; }).slice(0, 10);
+            lines.push('  Methoden: ' + dk.join(', '));
+        }
+        lines.push('RunningGameStore: ' + (mods.gameStore ? 'GEFUNDEN' : 'NICHT GEFUNDEN'));
+        lines.push('SelfPresenceStore: ' + (mods.presenceStore ? 'GEFUNDEN' : 'NICHT GEFUNDEN'));
+        lines.push('GatewayConnectionStore: ' + (mods.gateway ? 'GEFUNDEN' : 'NICHT GEFUNDEN'));
+        lines.push('UserStore: ' + (mods.userStore ? 'GEFUNDEN' : 'NICHT GEFUNDEN'));
+
+        if (mods.gameStore && mods.gameStore.getRunningGames) {
+            var games = mods.gameStore.getRunningGames();
+            lines.push('');
+            lines.push('Laufende Spiele: ' + (games ? games.length : 0));
+            if (games) games.forEach(function(g) { lines.push('  - ' + g.name + ' (PID:' + g.pid + ')'); });
+        }
+
+        if (mods.presenceStore && mods.presenceStore.getLocalPresence) {
+            try {
+                var pres = mods.presenceStore.getLocalPresence();
+                lines.push('');
+                lines.push('LocalPresence: ' + JSON.stringify(pres).substring(0, 300));
+            } catch(e) { lines.push('LocalPresence Error: ' + e.message); }
+        }
+
+        if (mods.gateway) {
+            try {
+                var sock = mods.gateway.getSocket();
+                lines.push('');
+                lines.push('Gateway Socket: ' + (sock ? 'GEFUNDEN' : 'NICHT GEFUNDEN'));
+                if (sock) {
+                    var methods = Object.getOwnPropertyNames(Object.getPrototypeOf(sock)).filter(function(k) { return typeof sock[k] === 'function'; });
+                    lines.push('Socket Methoden: ' + methods.join(', '));
+                }
+            } catch(e) { lines.push('Gateway Error: ' + e.message); }
+        }
+
+        if (mods.userStore && mods.userStore.getCurrentUser) {
+            try {
+                var user = mods.userStore.getCurrentUser();
+                if (user) lines.push('User: ' + user.username);
+            } catch(e) {}
+        }
+
+        var s = this._load();
+        lines.push('');
+        lines.push('=== Einstellungen ===');
+        lines.push('Typ: ' + s.statusType);
+        lines.push('Name: ' + s.gameName);
+        lines.push('AppID: ' + (s.appId || 'NICHT GESETZT'));
+        lines.push('Buttons: ' + (s.buttons || []).length);
+
+        lines.push('');
+        lines.push('=== Test Dispatch ===');
+        var act = this._buildActivity(s);
+
+        if (mods.dispatcher) {
+            try {
+                mods.dispatcher.dispatch({ type: 'LOCAL_ACTIVITY_UPDATE', activity: act, socketId: 'GhostGameStatus' });
+                lines.push('LOCAL_ACTIVITY_UPDATE: OK');
+            } catch(e) { lines.push('LOCAL_ACTIVITY_UPDATE: FEHLER - ' + e.message); }
+
+            if (s.statusType === 0) {
+                try {
+                    mods.dispatcher.dispatch({ type: 'RUNNING_GAMES_CHANGE', games: [{ id: 'test', name: act.name, pid: 31337, start: Date.now() }] });
+                    lines.push('RUNNING_GAMES_CHANGE: OK');
+                } catch(e) { lines.push('RUNNING_GAMES_CHANGE: FEHLER - ' + e.message); }
+            }
+        } else {
+            lines.push('Dispatcher nicht verfuegbar - nur Gateway wird benutzt');
+        }
+
+        if (mods.gateway) {
+            try {
+                var sock2 = mods.gateway.getSocket();
+                if (sock2 && sock2.presenceUpdate) {
+                    sock2.presenceUpdate({
+                        status: 'online',
+                        since: 0,
+                        activities: [act],
+                        afk: false
+                    });
+                    lines.push('Gateway presenceUpdate: OK');
+                } else if (sock2) {
+                    lines.push('Gateway Socket hat KEIN presenceUpdate');
+                    var m2 = [];
+                    var proto = Object.getPrototypeOf(sock2);
+                    var allKeys = Object.getOwnPropertyNames(proto);
+                    allKeys.forEach(function(k) {
+                        if (typeof sock2[k] === 'function' && (k.toLowerCase().indexOf('presen') >= 0 || k.toLowerCase().indexOf('activit') >= 0 || k.toLowerCase().indexOf('status') >= 0)) {
+                            m2.push(k);
+                        }
+                    });
+                    if (m2.length > 0) lines.push('Aehnliche Methoden: ' + m2.join(', '));
+                }
+            } catch(e) { lines.push('Gateway: FEHLER - ' + e.message); }
+        }
+
+        if (mods.presenceStore && mods.presenceStore.getLocalPresence) {
+            try {
+                var pres2 = mods.presenceStore.getLocalPresence();
+                lines.push('');
+                lines.push('=== Presence NACH Dispatch ===');
+                lines.push(JSON.stringify(pres2).substring(0, 300));
+            } catch(e) {}
+        }
+
+        return lines.join(nl);
+    }
+    getSettingsPanel() {
+        var self = this;
+        var el = document.createElement('div');
+        el.style.cssText = 'padding:8px;color:var(--text-normal);font-family:var(--font-primary);';
+        var s = this._load();
+        var TYPES = [{t:0,l:'Playing'},{t:1,l:'Streaming'},{t:2,l:'Listening'},{t:3,l:'Watching'},{t:5,l:'Competing'}];
+
+        function makeSec() {
+            var d = document.createElement('div');
+            d.style.cssText = 'background:var(--background-secondary,#2b2d31);border-radius:8px;padding:14px;margin-bottom:12px;';
+            return d;
+        }
+        function makeLbl(text) {
+            var d = document.createElement('div');
+            d.style.cssText = 'font-size:11px;font-weight:700;color:var(--header-secondary,#b9bbbe);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;';
+            d.textContent = text;
+            return d;
+        }
+        function makeInput(val, ph, onChange) {
+            var inp = document.createElement('input');
+            inp.style.cssText = 'width:100%;background:var(--input-background,#1e1f22);border:1px solid var(--input-border,#3f4147);border-radius:4px;color:var(--text-normal);font-size:14px;padding:8px 10px;outline:none;box-sizing:border-box;margin-bottom:6px;';
+            inp.value = val || '';
+            inp.placeholder = ph || '';
+            inp.oninput = function() { onChange(inp.value); };
+            return inp;
+        }
+        function makeBtn(text, active, onClick) {
+            var b = document.createElement('button');
+            b.style.cssText = 'padding:8px 14px;border-radius:6px;border:none;cursor:pointer;font-weight:600;font-size:13px;margin-right:6px;margin-bottom:6px;';
+            b.style.background = active ? '#3ba55d' : 'var(--background-modifier-hover,#3f4147)';
+            b.style.color = active ? '#fff' : 'var(--text-normal)';
+            b.textContent = text;
+            b.onclick = onClick;
+            return b;
+        }
+
+        var info = document.createElement('div');
+        info.style.cssText = 'background:rgba(88,101,242,0.1);border:1px solid #5865f2;border-radius:8px;padding:14px;margin-bottom:12px;font-size:13px;line-height:1.5;';
+        var infoTitle = document.createElement('b');
+        infoTitle.style.color = '#5865f2';
+        infoTitle.textContent = 'WICHTIG';
+        info.appendChild(infoTitle);
+        info.appendChild(document.createElement('br'));
+        info.appendChild(document.createTextNode('1. Discord Einstellungen > Aktivitaetsstatus > Aktuellen Status anzeigen muss AN sein.'));
+        info.appendChild(document.createElement('br'));
+        info.appendChild(document.createTextNode('2. Fuer Rich Presence + Buttons brauchst du eine Application ID von discord.com/developers'));
+        el.appendChild(info);
+
+        var typeSec = makeSec();
+        typeSec.appendChild(makeLbl('STATUSTYP'));
+        var typeRow = document.createElement('div');
+        typeRow.style.cssText = 'display:flex;flex-wrap:wrap;';
+        function renderTypes() {
+            typeRow.innerHTML = '';
+            TYPES.forEach(function(t) {
+                typeRow.appendChild(makeBtn(t.l, s.statusType === t.t, function() {
+                    s.statusType = t.t;
+                    renderTypes();
+                    streamSec.style.display = t.t === 1 ? '' : 'none';
+                }));
+            });
+        }
+        renderTypes();
+        typeSec.appendChild(typeRow);
+        el.appendChild(typeSec);
+
+        var streamSec = makeSec();
+        streamSec.appendChild(makeLbl('STREAM-URL'));
+        streamSec.appendChild(makeInput(s.streamUrl, 'https://twitch.tv/deinkanal', function(v) { s.streamUrl = v; }));
+        streamSec.style.display = s.statusType === 1 ? '' : 'none';
+        el.appendChild(streamSec);
+
+        var nameSec = makeSec();
+        nameSec.appendChild(makeLbl('SPIELNAME'));
+        nameSec.appendChild(makeInput(s.gameName, 'GhostClient', function(v) { s.gameName = v; }));
+        el.appendChild(nameSec);
+
+        var detSec = makeSec();
+        detSec.appendChild(makeLbl('DETAILS (ZEILE 2)'));
+        detSec.appendChild(makeInput(s.details, 'z.B. Im Hauptmenue', function(v) { s.details = v; }));
+        detSec.appendChild(makeLbl('STATUS-TEXT (ZEILE 3)'));
+        detSec.appendChild(makeInput(s.gameState, 'z.B. Level 42', function(v) { s.gameState = v; }));
+        el.appendChild(detSec);
+
+        var timeSec = makeSec();
+        timeSec.appendChild(makeLbl('ZEIT'));
+        var timeRow = document.createElement('div');
+        timeRow.style.cssText = 'display:flex;flex-wrap:wrap;margin-bottom:10px;';
+        var timeCustom = document.createElement('div');
+        timeCustom.style.cssText = 'display:flex;gap:10px;';
+        timeCustom.style.display = s.timeMode === 'custom' ? 'flex' : 'none';
+        function renderTimeMode() {
+            timeRow.innerHTML = '';
+            timeRow.appendChild(makeBtn('Echte Zeit', s.timeMode === 'real', function() { s.timeMode = 'real'; timeCustom.style.display = 'none'; renderTimeMode(); }));
+            timeRow.appendChild(makeBtn('Benutzerdefiniert', s.timeMode === 'custom', function() { s.timeMode = 'custom'; timeCustom.style.display = 'flex'; renderTimeMode(); }));
+        }
+        renderTimeMode();
+        timeSec.appendChild(timeRow);
+        var hWrap = document.createElement('div');
+        hWrap.style.cssText = 'flex:1;';
+        var hLbl = document.createElement('div');
+        hLbl.style.cssText = 'font-size:12px;color:var(--text-muted);margin-bottom:4px;';
+        hLbl.textContent = 'Stunden';
+        hWrap.appendChild(hLbl);
+        var hInp = document.createElement('input');
+        hInp.type = 'number'; hInp.min = '0'; hInp.max = '999'; hInp.value = s.customHours || 0;
+        hInp.style.cssText = 'width:100%;background:var(--input-background,#1e1f22);border:1px solid var(--input-border,#3f4147);border-radius:4px;color:var(--text-normal);font-size:14px;padding:8px 10px;outline:none;box-sizing:border-box;';
+        hInp.oninput = function() { s.customHours = parseInt(hInp.value, 10) || 0; };
+        hWrap.appendChild(hInp);
+        timeCustom.appendChild(hWrap);
+        var mWrap = document.createElement('div');
+        mWrap.style.cssText = 'flex:1;';
+        var mLbl = document.createElement('div');
+        mLbl.style.cssText = 'font-size:12px;color:var(--text-muted);margin-bottom:4px;';
+        mLbl.textContent = 'Minuten';
+        mWrap.appendChild(mLbl);
+        var mInp = document.createElement('input');
+        mInp.type = 'number'; mInp.min = '0'; mInp.max = '59'; mInp.value = s.customMinutes || 0;
+        mInp.style.cssText = 'width:100%;background:var(--input-background,#1e1f22);border:1px solid var(--input-border,#3f4147);border-radius:4px;color:var(--text-normal);font-size:14px;padding:8px 10px;outline:none;box-sizing:border-box;';
+        mInp.oninput = function() { s.customMinutes = parseInt(mInp.value, 10) || 0; };
+        mWrap.appendChild(mInp);
+        timeCustom.appendChild(mWrap);
+        timeSec.appendChild(timeCustom);
+        el.appendChild(timeSec);
+
+        var appSec = makeSec();
+        appSec.style.border = '1px solid #5865f2';
+        appSec.appendChild(makeLbl('APPLICATION ID'));
+        appSec.appendChild(makeInput(s.appId, 'Application ID von discord.com/developers', function(v) { s.appId = v; }));
+        var appInfo = document.createElement('div');
+        appInfo.style.cssText = 'font-size:12px;color:var(--text-muted);line-height:1.5;margin-top:4px;';
+        appInfo.appendChild(document.createTextNode('discord.com/developers/applications > New Application > Application ID kopieren.'));
+        appSec.appendChild(appInfo);
+        el.appendChild(appSec);
+
+        var btnSec = makeSec();
+        btnSec.appendChild(makeLbl('BUTTONS (BIS ZU 5)'));
+        var btnInfo = document.createElement('div');
+        btnInfo.style.cssText = 'font-size:12px;color:var(--text-muted);margin-bottom:10px;';
+        btnInfo.textContent = 'Discord zeigt maximal 2 Buttons auf dem Profil. Jeder Button braucht einen Namen und einen Link.';
+        btnSec.appendChild(btnInfo);
+        var btnList = document.createElement('div');
+        if (!s.buttons) s.buttons = [];
+        function renderButtons() {
+            btnList.innerHTML = '';
+            s.buttons.forEach(function(b, i) {
+                var row = document.createElement('div');
+                row.style.cssText = 'display:flex;gap:6px;margin-bottom:8px;align-items:center;';
+                var num = document.createElement('span');
+                num.style.cssText = 'font-size:12px;color:var(--text-muted);min-width:20px;';
+                num.textContent = (i + 1) + '.';
+                row.appendChild(num);
+                row.appendChild(makeInput(b.label, 'Button-Name', function(v) { s.buttons[i].label = v; }));
+                row.appendChild(makeInput(b.url, 'https://...', function(v) { s.buttons[i].url = v; }));
+                var delBtn = document.createElement('button');
+                delBtn.style.cssText = 'padding:6px 10px;border-radius:6px;border:none;cursor:pointer;font-weight:600;font-size:16px;background:transparent;color:#ed4245;';
+                delBtn.textContent = 'X';
+                delBtn.onclick = function() { s.buttons.splice(i, 1); renderButtons(); };
+                row.appendChild(delBtn);
+                btnList.appendChild(row);
+            });
+            if (s.buttons.length < 5) {
+                var addBtn = document.createElement('button');
+                addBtn.style.cssText = 'padding:8px 14px;border-radius:6px;border:none;cursor:pointer;font-weight:600;font-size:13px;background:var(--background-modifier-hover,#3f4147);color:var(--text-normal);width:100%;margin-top:4px;';
+                addBtn.textContent = '+ Button hinzufuegen';
+                addBtn.onclick = function() { s.buttons.push({ label: '', url: '' }); renderButtons(); };
+                btnList.appendChild(addBtn);
+            }
+        }
+        renderButtons();
+        btnSec.appendChild(btnList);
+        el.appendChild(btnSec);
+
+        var actRow = document.createElement('div');
+        actRow.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;';
+        var saveBtn = document.createElement('button');
+        saveBtn.style.cssText = 'flex:1;padding:13px;border:none;border-radius:6px;font-size:14px;font-weight:700;color:#fff;background:linear-gradient(135deg,#3ba55d,#2d8b4e);cursor:pointer;';
+        saveBtn.textContent = 'Status aktivieren';
+        saveBtn.onclick = function() {
+            self._save(s);
+            self._startTime = Date.now();
+            self._mods = self._findModules();
+            self._apply(s);
+            BdApi.UI.showToast('Status aktiviert!', { type: 'success' });
+        };
+        actRow.appendChild(saveBtn);
+        var stopBtn = document.createElement('button');
+        stopBtn.style.cssText = 'padding:13px 20px;border:none;border-radius:6px;font-size:14px;font-weight:700;color:#fff;background:#ed4245;cursor:pointer;';
+        stopBtn.textContent = 'Stoppen';
+        stopBtn.onclick = function() {
+            self._clear();
+            BdApi.UI.showToast('Status gestoppt.', { type: 'info' });
+        };
+        actRow.appendChild(stopBtn);
+        el.appendChild(actRow);
+
+        var diagBtn = document.createElement('button');
+        diagBtn.style.cssText = 'width:100%;padding:10px;border:1px solid var(--background-modifier-hover,#3f4147);border-radius:6px;font-size:13px;font-weight:600;color:var(--text-muted);background:transparent;cursor:pointer;margin-bottom:8px;';
+        diagBtn.textContent = 'Diagnose ausfuehren';
+        var diagOutput = document.createElement('pre');
+        diagOutput.style.cssText = 'display:none;background:var(--background-tertiary,#1e1f22);padding:10px;border-radius:6px;font-size:11px;color:var(--text-normal);white-space:pre-wrap;margin:0 0 8px 0;font-family:Consolas,monospace;max-height:400px;overflow-y:auto;';
+        diagBtn.onclick = function() {
+            var text = self._runDiag();
+            console.log(text);
+            diagOutput.textContent = text;
+            diagOutput.style.display = '';
+        };
+        el.appendChild(diagBtn);
+        el.appendChild(diagOutput);
+
+        return el;
+    }
+}
+
+module.exports = GhostGameStatus;
+`
     }
 ];
