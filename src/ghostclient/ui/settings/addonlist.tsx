@@ -78,38 +78,27 @@ function confirmEnable(action: () => void, type: string) {
     };
 }
 
-function editDistance(a: string, b: string): number {
-    const prev = Array.from({length: b.length + 1}, (_, i) => i);
-    for (let i = 0; i < a.length; i++) {
-        const curr = new Array(b.length + 1);
-        curr[0] = i + 1;
-        for (let j = 0; j < b.length; j++) {
-            curr[j + 1] = a[i] === b[j] ? prev[j] : 1 + Math.min(prev[j], prev[j + 1], curr[j]);
-        }
-        for (let j = 0; j <= b.length; j++) prev[j] = curr[j];
-    }
-    return prev[b.length];
-}
-
-function fuzzyMatch(haystack: string, needle: string): boolean {
-    const h = haystack.toLocaleLowerCase();
+function matchesName(name: string, needle: string): boolean {
+    const h = name.toLocaleLowerCase();
     const n = needle.toLocaleLowerCase().trim();
     if (!n) return true;
 
+    // Exact substring match (case-insensitive)
     if (h.includes(n)) return true;
 
-    let hi = 0, ni = 0;
-    while (hi < h.length && ni < n.length) {
-        if (h[hi] === n[ni]) ni++;
-        hi++;
-    }
-    if (ni === n.length) return true;
-
+    // Typo tolerance: check every sliding window of same length in name
+    // Allow 1 error per 5 chars (min 4 chars to activate)
     if (n.length < 4) return false;
-    const maxErrors = Math.floor(n.length / 4);
-    for (let start = 0; start <= h.length - n.length + maxErrors; start++) {
-        const sub = h.slice(start, start + n.length + maxErrors);
-        if (sub.length >= n.length - maxErrors && editDistance(sub, n) <= maxErrors) return true;
+    const maxErrors = Math.max(1, Math.floor(n.length / 5));
+    const prev = Array.from({length: n.length + 1}, (_, i) => i);
+    for (let i = 0; i < h.length; i++) {
+        const curr = new Array(n.length + 1);
+        curr[0] = 0; // free start
+        for (let j = 0; j < n.length; j++) {
+            curr[j + 1] = h[i] === n[j] ? prev[j] : 1 + Math.min(prev[j], prev[j + 1], curr[j]);
+        }
+        if (curr[n.length] <= maxErrors) return true;
+        for (let j = 0; j <= n.length; j++) prev[j] = curr[j];
     }
     return false;
 }
@@ -283,11 +272,7 @@ export default function AddonList({store}: {store: AddonManager;}) {
         }
 
         if (query.trim()) {
-            sorted = sorted.filter(addon =>
-                fuzzyMatch(addon.name, query) ||
-                fuzzyMatch(addon.author, query) ||
-                fuzzyMatch(addon.description, query)
-            );
+            sorted = sorted.filter(addon => matchesName(addon.name, query));
         }
 
         return sorted.map(addon => {
