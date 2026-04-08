@@ -1429,7 +1429,7 @@ module.exports = GhostClientLogo;`
  * @name GhostGameStatus
  * @author GhostClient
  * @description Custom Game Activity Status with buttons for your Discord profile.
- * @version 6.0.0
+ * @version 7.0.0
  * @source https://github.com/ghostclient
  */
 
@@ -1438,9 +1438,12 @@ class GhostGameStatus {
         this._interval = null;
         this._startTime = null;
         this._mods = null;
+        this._log = [];
     }
     start() {
         this._startTime = Date.now();
+        this._log = [];
+        this._addLog('Plugin startet v7.0.0...');
         this._mods = this._findModules();
         var s = this._load();
         this._apply(s);
@@ -1455,10 +1458,21 @@ class GhostGameStatus {
         this._clear();
         this._mods = null;
     }
+    _addLog(msg) {
+        this._log.push(msg);
+        console.log('[GhostGameStatus] ' + msg);
+    }
     _load() {
-        var d = { statusType: 0, gameName: 'GhostClient', details: '', gameState: '', timeMode: 'real', customHours: 0, customMinutes: 0, streamUrl: 'https://twitch.tv/ghostclient', appId: '', buttons: [] };
+        var d = { statusType: 0, gameName: 'GhostClient', lines: [], timeMode: 'real', customHours: 0, customMinutes: 0, streamUrl: 'https://twitch.tv/ghostclient', appId: '', buttons: [] };
         var s = BdApi.Data.load('GhostGameStatus', 'settings');
-        if (s) for (var k in s) d[k] = s[k];
+        if (s) {
+            for (var k in s) d[k] = s[k];
+            if (s.details && !s.lines) {
+                d.lines = [];
+                if (s.details) d.lines.push(s.details);
+                if (s.gameState) d.lines.push(s.gameState);
+            }
+        }
         return d;
     }
     _save(s) {
@@ -1469,48 +1483,69 @@ class GhostGameStatus {
         return Date.now() - ((s.customHours || 0) * 3600000 + (s.customMinutes || 0) * 60000);
     }
     _findModules() {
+        var self = this;
         var result = { dispatcher: null, gameStore: null, presenceStore: null, gateway: null, userStore: null };
 
-        try { result.dispatcher = BdApi.Webpack.getByKeys('dispatch', 'subscribe', 'register', { searchExports: true }); } catch(e) {}
-        if (!result.dispatcher) {
-            try { result.dispatcher = BdApi.Webpack.getModule(function(m) { return m && m.dispatch && m.subscribe && m.register; }, { searchExports: true }); } catch(e) {}
+        var methods = [
+            function() { return BdApi.Webpack.getByKeys('dispatch', 'subscribe', 'register', { searchExports: true }); },
+            function() { return BdApi.Webpack.getModule(function(m) { return m && m.dispatch && m.subscribe && m.register; }, { searchExports: true }); },
+            function() { return BdApi.Webpack.getModule(function(m) { return m && m.dispatch && m.subscribe; }, { searchExports: true }); },
+            function() { return BdApi.Webpack.getModule(function(m) { return m && typeof m.dispatch === 'function' && typeof m.subscribe === 'function'; }); },
+            function() { return BdApi.Webpack.getModule(BdApi.Webpack.Filters.byKeys('dispatch', 'subscribe', 'register'), { searchExports: true }); },
+            function() { return BdApi.Webpack.getModule(BdApi.Webpack.Filters.byKeys('dispatch', 'subscribe'), { searchExports: true }); }
+        ];
+
+        for (var i = 0; i < methods.length; i++) {
+            try {
+                var found = methods[i]();
+                if (found && found.dispatch) {
+                    result.dispatcher = found;
+                    self._addLog('Dispatcher GEFUNDEN mit Methode ' + (i + 1));
+                    break;
+                }
+            } catch(e) {
+                self._addLog('Dispatcher Methode ' + (i + 1) + ' fehlgeschlagen: ' + e.message);
+            }
         }
-        if (!result.dispatcher) {
-            try { result.dispatcher = BdApi.Webpack.getModule(function(m) { return m && m.dispatch && m.subscribe; }, { searchExports: true }); } catch(e) {}
-        }
+        if (!result.dispatcher) self._addLog('Dispatcher NICHT GEFUNDEN mit allen 6 Methoden');
 
         try { result.gameStore = BdApi.Webpack.getStore('RunningGameStore'); } catch(e) {}
-        if (!result.gameStore) {
-            try { result.gameStore = BdApi.Webpack.getModule(function(m) { return m && m.getRunningGames; }); } catch(e) {}
-        }
+        if (!result.gameStore) try { result.gameStore = BdApi.Webpack.getModule(function(m) { return m && m.getRunningGames; }); } catch(e) {}
+        self._addLog('RunningGameStore: ' + (result.gameStore ? 'GEFUNDEN' : 'NICHT GEFUNDEN'));
 
         try { result.presenceStore = BdApi.Webpack.getStore('SelfPresenceStore'); } catch(e) {}
-        if (!result.presenceStore) {
-            try { result.presenceStore = BdApi.Webpack.getModule(function(m) { return m && m.getLocalPresence; }); } catch(e) {}
-        }
+        if (!result.presenceStore) try { result.presenceStore = BdApi.Webpack.getModule(function(m) { return m && m.getLocalPresence; }); } catch(e) {}
+        self._addLog('SelfPresenceStore: ' + (result.presenceStore ? 'GEFUNDEN' : 'NICHT GEFUNDEN'));
 
         try { result.gateway = BdApi.Webpack.getStore('GatewayConnectionStore'); } catch(e) {}
-        if (!result.gateway) {
-            try { result.gateway = BdApi.Webpack.getModule(function(m) { return m && m.getSocket; }); } catch(e) {}
+        if (!result.gateway) try { result.gateway = BdApi.Webpack.getModule(function(m) { return m && m.getSocket; }); } catch(e) {}
+        self._addLog('GatewayConnectionStore: ' + (result.gateway ? 'GEFUNDEN' : 'NICHT GEFUNDEN'));
+
+        if (result.gateway) {
+            try {
+                var sock = result.gateway.getSocket();
+                if (sock) {
+                    var proto = Object.getPrototypeOf(sock);
+                    var fns = Object.getOwnPropertyNames(proto).filter(function(k) { return typeof sock[k] === 'function'; });
+                    self._addLog('Socket Methoden: ' + fns.join(', '));
+                } else {
+                    self._addLog('Socket ist NULL - keine Verbindung?');
+                }
+            } catch(e) { self._addLog('Socket Fehler: ' + e.message); }
         }
 
         try { result.userStore = BdApi.Webpack.getStore('UserStore'); } catch(e) {}
-        if (!result.userStore) {
-            try { result.userStore = BdApi.Webpack.getModule(function(m) { return m && m.getCurrentUser; }); } catch(e) {}
-        }
+        if (!result.userStore) try { result.userStore = BdApi.Webpack.getModule(function(m) { return m && m.getCurrentUser; }); } catch(e) {}
 
         return result;
     }
     _buildActivity(s) {
         var ts = this._getTs(s);
         var gn = s.gameName || 'GhostClient';
-        var act = {
-            name: gn,
-            type: s.statusType || 0,
-            timestamps: { start: ts }
-        };
-        if (s.details) act.details = s.details;
-        if (s.gameState) act.state = s.gameState;
+        var act = { name: gn, type: s.statusType || 0, timestamps: { start: ts } };
+        var lines = s.lines || [];
+        if (lines.length > 0 && lines[0]) act.details = lines[0];
+        if (lines.length > 1 && lines[1]) act.state = lines[1];
         if (s.statusType === 1) act.url = s.streamUrl || 'https://twitch.tv/ghostclient';
         if (s.appId) {
             act.application_id = s.appId;
@@ -1526,24 +1561,26 @@ class GhostGameStatus {
         if (!this._mods) this._mods = this._findModules();
         var mods = this._mods;
         var act = this._buildActivity(s);
+        var ok = false;
 
         if (mods.dispatcher) {
             try {
                 mods.dispatcher.dispatch({ type: 'LOCAL_ACTIVITY_UPDATE', activity: act, socketId: 'GhostGameStatus' });
-            } catch(e) { console.error('[GhostGameStatus] LOCAL_ACTIVITY_UPDATE error:', e); }
+                this._addLog('LOCAL_ACTIVITY_UPDATE dispatched');
+                ok = true;
+            } catch(e) { this._addLog('LOCAL_ACTIVITY_UPDATE FEHLER: ' + e.message); }
 
             if (s.statusType === 0) {
                 try {
                     var games = [];
                     if (mods.gameStore && mods.gameStore.getRunningGames) {
                         var existing = mods.gameStore.getRunningGames();
-                        if (Array.isArray(existing)) {
-                            games = existing.filter(function(g) { return g && g.pid !== 31337; });
-                        }
+                        if (Array.isArray(existing)) games = existing.filter(function(g) { return g && g.pid !== 31337; });
                     }
                     games.push({ id: 'ghostclient-custom', name: act.name, pid: 31337, start: act.timestamps.start });
                     mods.dispatcher.dispatch({ type: 'RUNNING_GAMES_CHANGE', games: games });
-                } catch(e) { console.error('[GhostGameStatus] RUNNING_GAMES_CHANGE error:', e); }
+                    this._addLog('RUNNING_GAMES_CHANGE dispatched (' + games.length + ' games)');
+                } catch(e) { this._addLog('RUNNING_GAMES_CHANGE FEHLER: ' + e.message); }
             }
         }
 
@@ -1551,15 +1588,40 @@ class GhostGameStatus {
             try {
                 var socket = mods.gateway.getSocket();
                 if (socket) {
-                    socket.presenceUpdate({ status: 'online', since: 0, activities: [act], afk: false });
+                    if (typeof socket.presenceUpdate === 'function') {
+                        socket.presenceUpdate({ status: 'online', since: 0, activities: [act], afk: false });
+                        this._addLog('Gateway presenceUpdate gesendet');
+                        ok = true;
+                    } else {
+                        var proto = Object.getPrototypeOf(socket);
+                        var allFns = Object.getOwnPropertyNames(proto).filter(function(k) { return typeof socket[k] === 'function'; });
+                        var presenceFns = allFns.filter(function(k) { return k.toLowerCase().indexOf('presen') >= 0 || k.toLowerCase().indexOf('status') >= 0 || k.toLowerCase().indexOf('activit') >= 0; });
+                        this._addLog('Kein presenceUpdate! Aehnliche: ' + (presenceFns.length > 0 ? presenceFns.join(', ') : 'KEINE'));
+
+                        if (typeof socket.send === 'function') {
+                            socket.send(3, { status: 'online', since: 0, activities: [act], afk: false });
+                            this._addLog('Fallback: socket.send(3, ...) versucht');
+                            ok = true;
+                        }
+                    }
+                } else {
+                    this._addLog('Gateway Socket ist NULL');
                 }
-            } catch(e) { console.error('[GhostGameStatus] Gateway presenceUpdate error:', e); }
+            } catch(e) { this._addLog('Gateway FEHLER: ' + e.message); }
         }
+
+        if (mods.presenceStore && mods.presenceStore.getLocalPresence) {
+            try {
+                var p = mods.presenceStore.getLocalPresence();
+                this._addLog('Presence nach Update: ' + JSON.stringify(p).substring(0, 200));
+            } catch(e) {}
+        }
+
+        if (!ok) this._addLog('WARNUNG: Keine Methode hat funktioniert!');
     }
     _clear() {
         if (!this._mods) this._mods = this._findModules();
         var mods = this._mods;
-
         if (mods.dispatcher) {
             try { mods.dispatcher.dispatch({ type: 'LOCAL_ACTIVITY_UPDATE', activity: null, socketId: 'GhostGameStatus' }); } catch(e) {}
             try { mods.dispatcher.dispatch({ type: 'RUNNING_GAMES_CHANGE', games: [] }); } catch(e) {}
@@ -1567,133 +1629,21 @@ class GhostGameStatus {
         if (mods.gateway) {
             try {
                 var socket = mods.gateway.getSocket();
-                if (socket) socket.presenceUpdate({ status: 'online', since: 0, activities: [], afk: false });
-            } catch(e) {}
-        }
-    }
-    _runDiag() {
-        var lines = [];
-        var mods = this._findModules();
-        this._mods = mods;
-        var nl = String.fromCharCode(10);
-        lines.push('=== GhostGameStatus v6.0 Diagnose ===');
-        lines.push('');
-        lines.push('FluxDispatcher: ' + (mods.dispatcher ? 'GEFUNDEN' : 'NICHT GEFUNDEN'));
-        if (mods.dispatcher) {
-            var dk = Object.keys(mods.dispatcher).filter(function(k) { return typeof mods.dispatcher[k] === 'function'; }).slice(0, 10);
-            lines.push('  Methoden: ' + dk.join(', '));
-        }
-        lines.push('RunningGameStore: ' + (mods.gameStore ? 'GEFUNDEN' : 'NICHT GEFUNDEN'));
-        lines.push('SelfPresenceStore: ' + (mods.presenceStore ? 'GEFUNDEN' : 'NICHT GEFUNDEN'));
-        lines.push('GatewayConnectionStore: ' + (mods.gateway ? 'GEFUNDEN' : 'NICHT GEFUNDEN'));
-        lines.push('UserStore: ' + (mods.userStore ? 'GEFUNDEN' : 'NICHT GEFUNDEN'));
-
-        if (mods.gameStore && mods.gameStore.getRunningGames) {
-            var games = mods.gameStore.getRunningGames();
-            lines.push('');
-            lines.push('Laufende Spiele: ' + (games ? games.length : 0));
-            if (games) games.forEach(function(g) { lines.push('  - ' + g.name + ' (PID:' + g.pid + ')'); });
-        }
-
-        if (mods.presenceStore && mods.presenceStore.getLocalPresence) {
-            try {
-                var pres = mods.presenceStore.getLocalPresence();
-                lines.push('');
-                lines.push('LocalPresence: ' + JSON.stringify(pres).substring(0, 300));
-            } catch(e) { lines.push('LocalPresence Error: ' + e.message); }
-        }
-
-        if (mods.gateway) {
-            try {
-                var sock = mods.gateway.getSocket();
-                lines.push('');
-                lines.push('Gateway Socket: ' + (sock ? 'GEFUNDEN' : 'NICHT GEFUNDEN'));
-                if (sock) {
-                    var methods = Object.getOwnPropertyNames(Object.getPrototypeOf(sock)).filter(function(k) { return typeof sock[k] === 'function'; });
-                    lines.push('Socket Methoden: ' + methods.join(', '));
+                if (socket && typeof socket.presenceUpdate === 'function') {
+                    socket.presenceUpdate({ status: 'online', since: 0, activities: [], afk: false });
+                } else if (socket && typeof socket.send === 'function') {
+                    socket.send(3, { status: 'online', since: 0, activities: [], afk: false });
                 }
-            } catch(e) { lines.push('Gateway Error: ' + e.message); }
-        }
-
-        if (mods.userStore && mods.userStore.getCurrentUser) {
-            try {
-                var user = mods.userStore.getCurrentUser();
-                if (user) lines.push('User: ' + user.username);
             } catch(e) {}
         }
-
-        var s = this._load();
-        lines.push('');
-        lines.push('=== Einstellungen ===');
-        lines.push('Typ: ' + s.statusType);
-        lines.push('Name: ' + s.gameName);
-        lines.push('AppID: ' + (s.appId || 'NICHT GESETZT'));
-        lines.push('Buttons: ' + (s.buttons || []).length);
-
-        lines.push('');
-        lines.push('=== Test Dispatch ===');
-        var act = this._buildActivity(s);
-
-        if (mods.dispatcher) {
-            try {
-                mods.dispatcher.dispatch({ type: 'LOCAL_ACTIVITY_UPDATE', activity: act, socketId: 'GhostGameStatus' });
-                lines.push('LOCAL_ACTIVITY_UPDATE: OK');
-            } catch(e) { lines.push('LOCAL_ACTIVITY_UPDATE: FEHLER - ' + e.message); }
-
-            if (s.statusType === 0) {
-                try {
-                    mods.dispatcher.dispatch({ type: 'RUNNING_GAMES_CHANGE', games: [{ id: 'test', name: act.name, pid: 31337, start: Date.now() }] });
-                    lines.push('RUNNING_GAMES_CHANGE: OK');
-                } catch(e) { lines.push('RUNNING_GAMES_CHANGE: FEHLER - ' + e.message); }
-            }
-        } else {
-            lines.push('Dispatcher nicht verfuegbar - nur Gateway wird benutzt');
-        }
-
-        if (mods.gateway) {
-            try {
-                var sock2 = mods.gateway.getSocket();
-                if (sock2 && sock2.presenceUpdate) {
-                    sock2.presenceUpdate({
-                        status: 'online',
-                        since: 0,
-                        activities: [act],
-                        afk: false
-                    });
-                    lines.push('Gateway presenceUpdate: OK');
-                } else if (sock2) {
-                    lines.push('Gateway Socket hat KEIN presenceUpdate');
-                    var m2 = [];
-                    var proto = Object.getPrototypeOf(sock2);
-                    var allKeys = Object.getOwnPropertyNames(proto);
-                    allKeys.forEach(function(k) {
-                        if (typeof sock2[k] === 'function' && (k.toLowerCase().indexOf('presen') >= 0 || k.toLowerCase().indexOf('activit') >= 0 || k.toLowerCase().indexOf('status') >= 0)) {
-                            m2.push(k);
-                        }
-                    });
-                    if (m2.length > 0) lines.push('Aehnliche Methoden: ' + m2.join(', '));
-                }
-            } catch(e) { lines.push('Gateway: FEHLER - ' + e.message); }
-        }
-
-        if (mods.presenceStore && mods.presenceStore.getLocalPresence) {
-            try {
-                var pres2 = mods.presenceStore.getLocalPresence();
-                lines.push('');
-                lines.push('=== Presence NACH Dispatch ===');
-                lines.push(JSON.stringify(pres2).substring(0, 300));
-            } catch(e) {}
-        }
-
-        return lines.join(nl);
     }
     getSettingsPanel() {
         var self = this;
         var el = document.createElement('div');
         el.style.cssText = 'padding:8px;color:var(--text-normal);font-family:var(--font-primary);';
         var s = this._load();
+        if (!s.lines) s.lines = [];
         var TYPES = [{t:0,l:'Playing'},{t:1,l:'Streaming'},{t:2,l:'Listening'},{t:3,l:'Watching'},{t:5,l:'Competing'}];
-
         function makeSec() {
             var d = document.createElement('div');
             d.style.cssText = 'background:var(--background-secondary,#2b2d31);border-radius:8px;padding:14px;margin-bottom:12px;';
@@ -1723,16 +1673,66 @@ class GhostGameStatus {
             return b;
         }
 
+        var statusSec = makeSec();
+        statusSec.style.border = '2px solid var(--background-modifier-hover)';
+        statusSec.appendChild(makeLbl('MODUL-STATUS (AUTOMATISCH)'));
+        var statusContent = document.createElement('div');
+        statusContent.style.cssText = 'font-size:12px;line-height:1.8;font-family:Consolas,monospace;';
+        function updateStatus() {
+            statusContent.innerHTML = '';
+            if (!self._mods) self._mods = self._findModules();
+            var mods = self._mods;
+            var items = [
+                { name: 'FluxDispatcher', found: !!mods.dispatcher },
+                { name: 'RunningGameStore', found: !!mods.gameStore },
+                { name: 'SelfPresenceStore', found: !!mods.presenceStore },
+                { name: 'GatewayConnection', found: !!mods.gateway },
+                { name: 'Application ID', found: !!(s.appId && s.appId.length > 10) }
+            ];
+            items.forEach(function(item) {
+                var row = document.createElement('div');
+                var dot = document.createElement('span');
+                dot.style.cssText = 'display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px;vertical-align:middle;';
+                dot.style.background = item.found ? '#3ba55d' : '#ed4245';
+                row.appendChild(dot);
+                var txt = document.createTextNode(item.name + ': ' + (item.found ? 'OK' : 'FEHLT'));
+                row.appendChild(txt);
+                statusContent.appendChild(row);
+            });
+        }
+        updateStatus();
+        statusSec.appendChild(statusContent);
+        el.appendChild(statusSec);
+
         var info = document.createElement('div');
-        info.style.cssText = 'background:rgba(88,101,242,0.1);border:1px solid #5865f2;border-radius:8px;padding:14px;margin-bottom:12px;font-size:13px;line-height:1.5;';
-        var infoTitle = document.createElement('b');
-        infoTitle.style.color = '#5865f2';
-        infoTitle.textContent = 'WICHTIG';
-        info.appendChild(infoTitle);
-        info.appendChild(document.createElement('br'));
-        info.appendChild(document.createTextNode('1. Discord Einstellungen > Aktivitaetsstatus > Aktuellen Status anzeigen muss AN sein.'));
-        info.appendChild(document.createElement('br'));
-        info.appendChild(document.createTextNode('2. Fuer Rich Presence + Buttons brauchst du eine Application ID von discord.com/developers'));
+        info.style.cssText = 'border-radius:8px;padding:14px;margin-bottom:12px;font-size:13px;line-height:1.5;';
+        function updateInfoBox() {
+            info.innerHTML = '';
+            if (s.appId && s.appId.length > 10) {
+                info.style.background = 'rgba(59,165,93,0.1)';
+                info.style.border = '1px solid #3ba55d';
+                var ok = document.createElement('b');
+                ok.style.color = '#3ba55d';
+                ok.textContent = 'BEREIT';
+                info.appendChild(ok);
+                info.appendChild(document.createElement('br'));
+                info.appendChild(document.createTextNode('Application ID gesetzt. Status wird fuer andere sichtbar sein.'));
+                info.appendChild(document.createElement('br'));
+                info.appendChild(document.createTextNode('Aktivitaetsstatus muss in Discord AN sein.'));
+            } else {
+                info.style.background = 'rgba(237,66,69,0.1)';
+                info.style.border = '1px solid #ed4245';
+                var warn = document.createElement('b');
+                warn.style.color = '#ed4245';
+                warn.textContent = 'APPLICATION ID FEHLT';
+                info.appendChild(warn);
+                info.appendChild(document.createElement('br'));
+                info.appendChild(document.createTextNode('Ohne ID sehen andere deinen Status nicht.'));
+                info.appendChild(document.createElement('br'));
+                info.appendChild(document.createTextNode('discord.com/developers/applications > New Application'));
+            }
+        }
+        updateInfoBox();
         el.appendChild(info);
 
         var typeSec = makeSec();
@@ -1760,16 +1760,48 @@ class GhostGameStatus {
         el.appendChild(streamSec);
 
         var nameSec = makeSec();
-        nameSec.appendChild(makeLbl('SPIELNAME'));
+        nameSec.appendChild(makeLbl('SPIELNAME (ZEILE 1)'));
         nameSec.appendChild(makeInput(s.gameName, 'GhostClient', function(v) { s.gameName = v; }));
         el.appendChild(nameSec);
 
-        var detSec = makeSec();
-        detSec.appendChild(makeLbl('DETAILS (ZEILE 2)'));
-        detSec.appendChild(makeInput(s.details, 'z.B. Im Hauptmenue', function(v) { s.details = v; }));
-        detSec.appendChild(makeLbl('STATUS-TEXT (ZEILE 3)'));
-        detSec.appendChild(makeInput(s.gameState, 'z.B. Level 42', function(v) { s.gameState = v; }));
-        el.appendChild(detSec);
+        var linesSec = makeSec();
+        linesSec.appendChild(makeLbl('ZUSAETZLICHE ZEILEN'));
+        var linesInfo = document.createElement('div');
+        linesInfo.style.cssText = 'font-size:12px;color:var(--text-muted);margin-bottom:10px;';
+        linesInfo.textContent = 'Discord zeigt max. 3 Zeilen: Name + 2 Zusatzzeilen.';
+        linesSec.appendChild(linesInfo);
+        var linesList = document.createElement('div');
+        function renderLines() {
+            linesList.innerHTML = '';
+            s.lines.forEach(function(line, i) {
+                var row = document.createElement('div');
+                row.style.cssText = 'display:flex;gap:6px;margin-bottom:8px;align-items:center;';
+                var num = document.createElement('span');
+                num.style.cssText = 'font-size:12px;color:var(--text-muted);min-width:50px;';
+                num.textContent = 'Zeile ' + (i + 2);
+                row.appendChild(num);
+                var inp = makeInput(line, i === 0 ? 'z.B. Im Hauptmenue' : 'z.B. Level 42', function(v) { s.lines[i] = v; });
+                inp.style.flex = '1';
+                inp.style.marginBottom = '0';
+                row.appendChild(inp);
+                var delBtn = document.createElement('button');
+                delBtn.style.cssText = 'padding:6px 10px;border-radius:6px;border:none;cursor:pointer;font-weight:600;font-size:16px;background:transparent;color:#ed4245;';
+                delBtn.textContent = 'X';
+                delBtn.onclick = function() { s.lines.splice(i, 1); renderLines(); };
+                row.appendChild(delBtn);
+                linesList.appendChild(row);
+            });
+            if (s.lines.length < 2) {
+                var addBtn = document.createElement('button');
+                addBtn.style.cssText = 'padding:8px 14px;border-radius:6px;border:none;cursor:pointer;font-weight:600;font-size:13px;background:var(--background-modifier-hover,#3f4147);color:var(--text-normal);width:100%;margin-top:4px;';
+                addBtn.textContent = '+ Zeile hinzufuegen';
+                addBtn.onclick = function() { s.lines.push(''); renderLines(); };
+                linesList.appendChild(addBtn);
+            }
+        }
+        renderLines();
+        linesSec.appendChild(linesList);
+        el.appendChild(linesSec);
 
         var timeSec = makeSec();
         timeSec.appendChild(makeLbl('ZEIT'));
@@ -1813,20 +1845,23 @@ class GhostGameStatus {
         el.appendChild(timeSec);
 
         var appSec = makeSec();
-        appSec.style.border = '1px solid #5865f2';
+        function updateAppSec() {
+            appSec.style.border = (s.appId && s.appId.length > 10) ? '2px solid #3ba55d' : '2px solid #ed4245';
+        }
+        updateAppSec();
         appSec.appendChild(makeLbl('APPLICATION ID'));
-        appSec.appendChild(makeInput(s.appId, 'Application ID von discord.com/developers', function(v) { s.appId = v; }));
-        var appInfo = document.createElement('div');
-        appInfo.style.cssText = 'font-size:12px;color:var(--text-muted);line-height:1.5;margin-top:4px;';
-        appInfo.appendChild(document.createTextNode('discord.com/developers/applications > New Application > Application ID kopieren.'));
-        appSec.appendChild(appInfo);
+        appSec.appendChild(makeInput(s.appId, 'Anwendungs-ID von discord.com/developers', function(v) { s.appId = v; updateInfoBox(); updateAppSec(); updateStatus(); }));
+        var appHelp = document.createElement('div');
+        appHelp.style.cssText = 'font-size:12px;color:var(--text-muted);line-height:1.5;margin-top:4px;';
+        appHelp.appendChild(document.createTextNode('discord.com/developers/applications > New Application > Anwendungs-ID kopieren.'));
+        appSec.appendChild(appHelp);
         el.appendChild(appSec);
 
         var btnSec = makeSec();
         btnSec.appendChild(makeLbl('BUTTONS (BIS ZU 5)'));
         var btnInfo = document.createElement('div');
         btnInfo.style.cssText = 'font-size:12px;color:var(--text-muted);margin-bottom:10px;';
-        btnInfo.textContent = 'Discord zeigt maximal 2 Buttons auf dem Profil. Jeder Button braucht einen Namen und einen Link.';
+        btnInfo.textContent = 'Discord zeigt max. 2 Buttons. Braucht Application ID.';
         btnSec.appendChild(btnInfo);
         var btnList = document.createElement('div');
         if (!s.buttons) s.buttons = [];
@@ -1868,9 +1903,16 @@ class GhostGameStatus {
         saveBtn.onclick = function() {
             self._save(s);
             self._startTime = Date.now();
+            self._log = [];
             self._mods = self._findModules();
             self._apply(s);
-            BdApi.UI.showToast('Status aktiviert!', { type: 'success' });
+            updateStatus();
+            updateLogOutput();
+            if (!s.appId) {
+                BdApi.UI.showToast('Nur lokal! Setze eine Application ID.', { type: 'warning' });
+            } else {
+                BdApi.UI.showToast('Status aktiviert!', { type: 'success' });
+            }
         };
         actRow.appendChild(saveBtn);
         var stopBtn = document.createElement('button');
@@ -1883,19 +1925,17 @@ class GhostGameStatus {
         actRow.appendChild(stopBtn);
         el.appendChild(actRow);
 
-        var diagBtn = document.createElement('button');
-        diagBtn.style.cssText = 'width:100%;padding:10px;border:1px solid var(--background-modifier-hover,#3f4147);border-radius:6px;font-size:13px;font-weight:600;color:var(--text-muted);background:transparent;cursor:pointer;margin-bottom:8px;';
-        diagBtn.textContent = 'Diagnose ausfuehren';
-        var diagOutput = document.createElement('pre');
-        diagOutput.style.cssText = 'display:none;background:var(--background-tertiary,#1e1f22);padding:10px;border-radius:6px;font-size:11px;color:var(--text-normal);white-space:pre-wrap;margin:0 0 8px 0;font-family:Consolas,monospace;max-height:400px;overflow-y:auto;';
-        diagBtn.onclick = function() {
-            var text = self._runDiag();
-            console.log(text);
-            diagOutput.textContent = text;
-            diagOutput.style.display = '';
-        };
-        el.appendChild(diagBtn);
-        el.appendChild(diagOutput);
+        var logSec = makeSec();
+        logSec.appendChild(makeLbl('LOG (LETZTE AKTIONEN)'));
+        var logOutput = document.createElement('pre');
+        logOutput.style.cssText = 'background:var(--background-tertiary,#1e1f22);padding:10px;border-radius:6px;font-size:11px;color:var(--text-normal);white-space:pre-wrap;margin:0;font-family:Consolas,monospace;max-height:300px;overflow-y:auto;';
+        function updateLogOutput() {
+            var nl = String.fromCharCode(10);
+            logOutput.textContent = self._log.length > 0 ? self._log.join(nl) : 'Noch keine Aktionen. Klick "Status aktivieren".';
+        }
+        updateLogOutput();
+        logSec.appendChild(logOutput);
+        el.appendChild(logSec);
 
         return el;
     }
