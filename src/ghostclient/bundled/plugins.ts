@@ -1458,9 +1458,33 @@ class GhostGameStatus {
         this._clear();
         this._mods = null;
     }
+    _getLogPath() {
+        try {
+            var path = require('path');
+            var os = require('os');
+            return path.join(os.homedir(), 'Desktop', 'GhostGameStatus.log');
+        } catch(e) {
+            return null;
+        }
+    }
+    _writeLogFile() {
+        try {
+            var fs = require('fs');
+            var logPath = this._getLogPath();
+            if (!logPath) return;
+            var nl = String.fromCharCode(10);
+            var header = '=== GhostGameStatus v7.1 Log ===' + nl;
+            header += 'Zeitpunkt: ' + new Date().toLocaleString() + nl;
+            header += '================================' + nl + nl;
+            fs.writeFileSync(logPath, header + this._log.join(nl) + nl);
+        } catch(e) {
+            console.log('[GhostGameStatus] Log-Datei Fehler: ' + e.message);
+        }
+    }
     _addLog(msg) {
         this._log.push(msg);
         console.log('[GhostGameStatus] ' + msg);
+        this._writeLogFile();
     }
     _load() {
         var d = { statusType: 0, gameName: 'GhostClient', lines: [], timeMode: 'real', customHours: 0, customMinutes: 0, streamUrl: 'https://twitch.tv/ghostclient', appId: '', buttons: [] };
@@ -1925,13 +1949,25 @@ class GhostGameStatus {
         actRow.appendChild(stopBtn);
         el.appendChild(actRow);
 
+        var diagBtn = document.createElement('button');
+        diagBtn.style.cssText = 'width:100%;padding:10px;border:1px solid var(--background-modifier-hover,#3f4147);border-radius:6px;font-size:13px;font-weight:600;color:var(--text-muted);background:transparent;cursor:pointer;margin-bottom:8px;';
+        diagBtn.textContent = 'Diagnose ausfuehren';
+        diagBtn.onclick = function() {
+            self._log = [];
+            self._mods = self._findModules();
+            self._apply(self._load());
+            updateStatus();
+            updateLogOutput();
+        };
+        el.appendChild(diagBtn);
+
         var logSec = makeSec();
         logSec.appendChild(makeLbl('LOG (LETZTE AKTIONEN)'));
         var logOutput = document.createElement('pre');
         logOutput.style.cssText = 'background:var(--background-tertiary,#1e1f22);padding:10px;border-radius:6px;font-size:11px;color:var(--text-normal);white-space:pre-wrap;margin:0;font-family:Consolas,monospace;max-height:300px;overflow-y:auto;';
         function updateLogOutput() {
             var nl = String.fromCharCode(10);
-            logOutput.textContent = self._log.length > 0 ? self._log.join(nl) : 'Noch keine Aktionen. Klick "Status aktivieren".';
+            logOutput.textContent = self._log.length > 0 ? self._log.join(nl) : 'Noch keine Aktionen. Klick "Diagnose" oder "Status aktivieren".';
         }
         updateLogOutput();
         logSec.appendChild(logOutput);
