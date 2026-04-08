@@ -1985,8 +1985,8 @@ module.exports = GhostGameStatus;
         content: `/**
  * @name GhostColour
  * @author GhostClient
- * @description Farbiger Text und Formatierung fuer Discord Nachrichten.
- * @version 3.0.0
+ * @description Farbiger Text, Formatierung und Nachrichten verstecken.
+ * @version 4.0.0
  * @source https://github.com/ghostclient
  */
 
@@ -2011,28 +2011,53 @@ class GhostColour {
         this._fmtBtns = [];
         this._selTimer = null;
         this._fns = {};
+        this._previewEl = null;
+        this._hidden = new Set();
+        this._hideObserver = null;
+        this._hideTimer = null;
+        this._toggleBar = null;
+        this._showHidden = false;
     }
+
     start() {
+        this._loadHidden();
         this._injectStyles();
         this._buildIcon();
         this._buildPicker();
+        this._buildToggleBar();
         this._attachEvents();
-        BdApi.UI.showToast('GhostColour geladen! Text markieren um Farben anzuwenden.', { type: 'success' });
+        this._startHideObserver();
+        this._processMessages();
     }
+
     stop() {
-        ['mousemove', 'mousedown', 'selectionchange', 'mousemove_drag', 'mouseup_drag'].forEach(function() {});
         if (this._fns.mousemove) document.removeEventListener('mousemove', this._fns.mousemove);
         if (this._fns.mousedown) document.removeEventListener('mousedown', this._fns.mousedown);
         if (this._fns.selectionchange) document.removeEventListener('selectionchange', this._fns.selectionchange);
         if (this._fns.dragMove) document.removeEventListener('mousemove', this._fns.dragMove);
         if (this._fns.dragUp) document.removeEventListener('mouseup', this._fns.dragUp);
-        [this._styleEl, this._picker, this._icon].forEach(function(el) {
+        if (this._hideObserver) { this._hideObserver.disconnect(); this._hideObserver = null; }
+        [this._styleEl, this._picker, this._icon, this._toggleBar].forEach(function(el) {
             if (el && el.parentNode) el.parentNode.removeChild(el);
         });
-        this._picker = null;
-        this._icon = null;
-        this._styleEl = null;
+        document.querySelectorAll('.gc-hide-btn').forEach(function(b) { if (b.parentNode) b.parentNode.removeChild(b); });
+        document.querySelectorAll('[data-gc-hidden="1"]').forEach(function(e) { e.removeAttribute('data-gc-hidden'); });
     }
+
+    _loadHidden() {
+        try {
+            var raw = localStorage.getItem('gc_hidden_msgs');
+            if (raw) {
+                var arr = JSON.parse(raw);
+                if (Array.isArray(arr)) this._hidden = new Set(arr);
+            }
+        } catch(e) {}
+    }
+
+    _saveHidden() {
+        try { localStorage.setItem('gc_hidden_msgs', JSON.stringify(Array.from(this._hidden))); } catch(e) {}
+    }
+
     _injectStyles() {
         var css = [
             '#gc-icon{position:fixed;z-index:2147483647;display:none;cursor:pointer;width:34px;height:34px;border-radius:8px;background:#313338;border:1px solid #4e5058;box-shadow:0 4px 14px rgba(0,0,0,0.5);align-items:center;justify-content:center;pointer-events:auto}',
@@ -2055,20 +2080,28 @@ class GhostColour {
             '.gc-btn{flex:1;padding:10px;border:none;border-radius:6px;font-size:14px;font-weight:700;color:#fff;cursor:pointer}',
             '.gc-btn-p{background:#5865f2}.gc-btn-p:hover{background:#4752c4}',
             '.gc-btn-c{background:#1e1f22;color:#dcddde;border:1px solid #4e5058}.gc-btn-c:hover{background:#2e3035}',
-            '.gc-close{cursor:pointer;font-size:16px;color:#b5bac1;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:4px}.gc-close:hover{background:#4e5058;color:#fff}'
+            '.gc-close{cursor:pointer;font-size:16px;color:#b5bac1;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:4px}.gc-close:hover{background:#4e5058;color:#fff}',
+            '[data-gc-hidden="1"]{display:none!important}',
+            '.gc-show-hidden [data-gc-hidden="1"]{display:block!important;opacity:0.28;pointer-events:none;filter:blur(2px)}',
+            '.gc-hide-btn{display:none;position:absolute;z-index:100;top:2px;right:44px;width:28px;height:28px;border-radius:6px;border:none;cursor:pointer;background:#2b2d31;border:1px solid #4e5058;align-items:center;justify-content:center;font-size:14px;padding:0;line-height:1}',
+            '.gc-hide-btn:hover{background:#ed4245!important;border-color:#ed4245}',
+            '[data-gc-msg]:hover .gc-hide-btn{display:flex}',
+            '#gc-toggle-bar{position:fixed;bottom:74px;right:16px;z-index:9999;background:#313338;border:1px solid #4e5058;border-radius:8px;padding:8px 14px;font-size:12px;color:#b5bac1;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.5);display:none;user-select:none;font-family:var(--font-primary,sans-serif)}',
+            '#gc-toggle-bar:hover{background:#3f4147;color:#fff}'
         ].join('');
         this._styleEl = document.createElement('style');
         this._styleEl.id = 'gc-style';
         this._styleEl.textContent = css;
         document.head.appendChild(this._styleEl);
     }
+
     _buildIcon() {
         var self = this;
         var el = document.createElement('div');
         el.id = 'gc-icon';
-        el.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b5bac1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="0" fill="#dc3545" stroke="none" r="2"/><path d="M17.5 2.2L21.8 6.5l-11 11-4.3 1 1-4.3z"/><circle cx="7" cy="17" r="1.5" fill="#28a745" stroke="none"/><circle cx="5" cy="14" r="1" fill="#4f8ff7" stroke="none"/></svg>';
+        var svg = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 8 6.5 8 8 8.67 8 9.5 7.33 11 6.5 11zm3-4C8.67 7 8 6.33 8 5.5S8.67 4 9.5 4s1.5.67 1.5 1.5S10.33 7 9.5 7zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 4 14.5 4s1.5.67 1.5 1.5S15.33 7 14.5 7zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 8 17.5 8s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" fill="#b5bac1"/></svg>';
+        el.innerHTML = svg;
         el.title = 'GhostColour - Farbe anwenden';
-        el.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2a5 5 0 0 1 5 5c0 2.5-2 4.5-4 6l-1 1-1-1c-2-1.5-4-3.5-4-6a5 5 0 0 1 5-5z" fill="#5865f2"/><circle cx="9" cy="7" r="1.2" fill="#ff6b6b"/><circle cx="12" cy="5.5" r="1.2" fill="#51cf66"/><circle cx="15" cy="7" r="1.2" fill="#339af0"/><rect x="10.5" y="14" width="3" height="6" rx="1.5" fill="#80848e"/><rect x="9" y="19" width="6" height="2" rx="1" fill="#4e5058"/></svg>';
         el.onclick = function(e) {
             e.stopPropagation();
             e.preventDefault();
@@ -2078,6 +2111,7 @@ class GhostColour {
         document.body.appendChild(el);
         this._icon = el;
     }
+
     _buildPicker() {
         var self = this;
         var wrap = document.createElement('div');
@@ -2109,27 +2143,26 @@ class GhostColour {
 
         var prevLbl = document.createElement('div');
         prevLbl.className = 'gc-lbl';
-        prevLbl.textContent = 'Ausgewaehlter Text';
+        prevLbl.textContent = 'Ausgew\u00e4hlter Text';
         body.appendChild(prevLbl);
 
         this._previewEl = document.createElement('div');
         this._previewEl.className = 'gc-preview';
-        this._previewEl.id = 'gc-preview';
         body.appendChild(this._previewEl);
 
         var colorLbl = document.createElement('div');
         colorLbl.className = 'gc-lbl';
-        colorLbl.textContent = 'Farbe waehlen';
+        colorLbl.textContent = 'Farbe';
         body.appendChild(colorLbl);
 
         var COLORS = [
             { n: 'Rot', c: 31, h: '#ed4245' },
-            { n: 'Gruen', c: 32, h: '#57f287' },
+            { n: 'Gr\u00fcn', c: 32, h: '#57f287' },
             { n: 'Gelb', c: 33, h: '#fee75c' },
             { n: 'Blau', c: 34, h: '#5865f2' },
             { n: 'Pink', c: 35, h: '#eb459e' },
             { n: 'Cyan', c: 36, h: '#00b0f4' },
-            { n: 'Weiss', c: 37, h: '#ffffff' },
+            { n: 'Wei\u00df', c: 37, h: '#ffffff' },
             { n: 'Dunkel', c: 30, h: '#4e5058' }
         ];
         var grid = document.createElement('div');
@@ -2143,12 +2176,7 @@ class GhostColour {
             btn.onclick = function(e) {
                 e.preventDefault();
                 self._colorBtns.forEach(function(b) { b.classList.remove('on'); });
-                if (self._color === col.c) {
-                    self._color = null;
-                } else {
-                    self._color = col.c;
-                    btn.classList.add('on');
-                }
+                if (self._color === col.c) { self._color = null; } else { self._color = col.c; btn.classList.add('on'); }
                 self._updatePreview();
             };
             self._colorBtns.push(btn);
@@ -2196,7 +2224,7 @@ class GhostColour {
         brow.className = 'gc-brow';
         var applyBtn = document.createElement('button');
         applyBtn.className = 'gc-btn gc-btn-p';
-        applyBtn.textContent = 'Einfuegen';
+        applyBtn.textContent = 'Einf\u00fcgen';
         applyBtn.onclick = function(e) { e.preventDefault(); self._apply(false); };
         brow.appendChild(applyBtn);
         var copyBtn = document.createElement('button');
@@ -2210,13 +2238,40 @@ class GhostColour {
         document.body.appendChild(wrap);
         this._picker = wrap;
     }
+
+    _buildToggleBar() {
+        var self = this;
+        var bar = document.createElement('div');
+        bar.id = 'gc-toggle-bar';
+        bar.onclick = function() {
+            self._showHidden = !self._showHidden;
+            var scroller = document.querySelector('[class*="messagesWrapper_"]') || document.querySelector('[class*="chat_"]') || document.body;
+            if (self._showHidden) {
+                scroller.classList.add('gc-show-hidden');
+                bar.textContent = self._hidden.size + ' versteckt - Klick zum Verbergen';
+            } else {
+                scroller.classList.remove('gc-show-hidden');
+                bar.textContent = self._hidden.size + ' versteckt - Klick zum Anzeigen';
+            }
+        };
+        document.body.appendChild(bar);
+        this._toggleBar = bar;
+        this._updateToggleBar();
+    }
+
+    _updateToggleBar() {
+        if (!this._toggleBar) return;
+        var n = this._hidden.size;
+        if (n === 0) { this._toggleBar.style.display = 'none'; return; }
+        this._toggleBar.style.display = 'block';
+        var action = this._showHidden ? 'Klick zum Verbergen' : 'Klick zum Anzeigen';
+        this._toggleBar.textContent = n + ' Nachricht' + (n === 1 ? '' : 'en') + ' versteckt - ' + action;
+    }
+
     _attachEvents() {
         var self = this;
 
-        self._fns.mousemove = function(e) {
-            self._mouseX = e.clientX;
-            self._mouseY = e.clientY;
-        };
+        self._fns.mousemove = function(e) { self._mouseX = e.clientX; self._mouseY = e.clientY; };
         document.addEventListener('mousemove', self._fns.mousemove);
 
         self._fns.dragMove = function(e) {
@@ -2237,9 +2292,7 @@ class GhostColour {
                 if (self._dragging) return;
                 var sel = window.getSelection();
                 var text = sel ? sel.toString().trim() : '';
-                if (!sel || sel.rangeCount === 0 || text.length === 0) {
-                    return;
-                }
+                if (!sel || sel.rangeCount === 0 || text.length === 0) return;
                 self._savedText = text;
                 self._savedRange = sel.getRangeAt(0).cloneRange();
                 var node = sel.anchorNode;
@@ -2249,17 +2302,12 @@ class GhostColour {
                     if (cur.getAttribute) {
                         var role = cur.getAttribute('role');
                         var ce = cur.getAttribute('contenteditable');
-                        if (role === 'textbox' || ce === 'true' || ce === '') {
-                            self._inEditor = true;
-                            break;
-                        }
+                        if (role === 'textbox' || ce === 'true' || ce === '') { self._inEditor = true; break; }
                     }
                     cur = cur.parentNode;
                 }
-                var ix = self._mouseX;
-                var iy = self._mouseY;
-                var iconX = Math.max(4, Math.min(ix - 17, window.innerWidth - 42));
-                var iconY = Math.max(4, iy - 48);
+                var iconX = Math.max(4, Math.min(self._mouseX - 17, window.innerWidth - 42));
+                var iconY = Math.max(4, self._mouseY - 48);
                 self._icon.style.left = iconX + 'px';
                 self._icon.style.top = iconY + 'px';
                 self._icon.style.display = 'flex';
@@ -2276,6 +2324,58 @@ class GhostColour {
         };
         document.addEventListener('mousedown', self._fns.mousedown);
     }
+
+    _startHideObserver() {
+        var self = this;
+        self._hideObserver = new MutationObserver(function() {
+            clearTimeout(self._hideTimer);
+            self._hideTimer = setTimeout(function() { self._processMessages(); }, 300);
+        });
+        self._hideObserver.observe(document.body, { childList: true, subtree: true });
+    }
+
+    _processMessages() {
+        var self = this;
+        var msgs = document.querySelectorAll('[id^="chat-messages-"]');
+        msgs.forEach(function(el) {
+            var parts = el.id.split('-');
+            var msgId = parts[parts.length - 1];
+            if (!msgId || isNaN(msgId)) return;
+            if (!el.querySelector('.gc-hide-btn')) {
+                el.setAttribute('data-gc-msg', msgId);
+                el.style.position = 'relative';
+                var btn = document.createElement('button');
+                btn.className = 'gc-hide-btn';
+                btn.title = 'Nachricht verstecken';
+                btn.textContent = '\uD83D\uDEAB';
+                btn.onclick = function(e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    if (self._hidden.has(msgId)) {
+                        self._hidden.delete(msgId);
+                        self._saveHidden();
+                        el.removeAttribute('data-gc-hidden');
+                        btn.title = 'Nachricht verstecken';
+                        btn.textContent = '\uD83D\uDEAB';
+                        try { BdApi.UI.showToast('Nachricht eingeblendet.', { type: 'success' }); } catch(ex) {}
+                    } else {
+                        self._hidden.add(msgId);
+                        self._saveHidden();
+                        el.setAttribute('data-gc-hidden', '1');
+                        try { BdApi.UI.showToast('Nachricht versteckt.', { type: 'success' }); } catch(ex) {}
+                    }
+                    self._updateToggleBar();
+                };
+                el.appendChild(btn);
+            }
+            if (self._hidden.has(msgId)) {
+                el.setAttribute('data-gc-hidden', '1');
+            } else if (!self._showHidden) {
+                el.removeAttribute('data-gc-hidden');
+            }
+        });
+    }
+
     _openPicker() {
         if (!this._picker) return;
         this._color = null;
@@ -2294,14 +2394,15 @@ class GhostColour {
         this._picker.style.display = 'block';
         this._icon.style.display = 'none';
     }
+
     _closePicker() {
         if (this._picker) this._picker.style.display = 'none';
     }
+
     _updatePreview() {
         var el = this._previewEl;
         if (!el) return;
-        var text = this._savedText || '...';
-        el.textContent = text;
+        el.textContent = this._savedText || '...';
         var CMAP = { 30: '#4e5058', 31: '#ed4245', 32: '#57f287', 33: '#fee75c', 34: '#5865f2', 35: '#eb459e', 36: '#00b0f4', 37: '#ffffff' };
         var s = 'background:#1e1f22;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:14px;min-height:24px;word-break:break-word;line-height:1.4;';
         s += 'color:' + (this._color !== null ? (CMAP[this._color] || '#fff') : '#dcddde') + ';';
@@ -2312,6 +2413,7 @@ class GhostColour {
         if (td.length) s += 'text-decoration:' + td.join(' ') + ';';
         el.style.cssText = s;
     }
+
     _buildText(text) {
         if (this._color !== null) {
             var ESC = String.fromCharCode(27);
@@ -2329,6 +2431,22 @@ class GhostColour {
         if (this._strike) r = '~~' + r + '~~';
         return r;
     }
+
+    _insertViaDispatch(text) {
+        try {
+            var cd = BdApi.Webpack.getByKeys('dispatchToLastSubscribed');
+            if (cd && cd.dispatchToLastSubscribed) {
+                cd.dispatchToLastSubscribed('INSERT_TEXT', { content: text, plainText: text });
+                return true;
+            }
+        } catch(e) {}
+        try {
+            var cd2 = BdApi.Webpack.getModule(function(m) { return m && typeof m.dispatchToLastSubscribed === 'function'; });
+            if (cd2) { cd2.dispatchToLastSubscribed('INSERT_TEXT', { content: text, plainText: text }); return true; }
+        } catch(e) {}
+        return false;
+    }
+
     _clip(text) {
         try { require('electron').clipboard.writeText(text); return; } catch(e) {}
         try { navigator.clipboard.writeText(text); return; } catch(e) {}
@@ -2340,60 +2458,71 @@ class GhostColour {
         document.execCommand('copy');
         document.body.removeChild(ta);
     }
+
     _apply(clipOnly) {
         if (!this._savedText || this._savedText.trim().length === 0) {
-            BdApi.UI.showToast('Kein Text markiert!', { type: 'error' });
+            try { BdApi.UI.showToast('Kein Text ausgew\u00e4hlt!', { type: 'error' }); } catch(e) {}
             return;
         }
         var formatted = this._buildText(this._savedText);
         if (clipOnly) {
             this._clip(formatted);
-            BdApi.UI.showToast('In Zwischenablage kopiert!', { type: 'success' });
+            try { BdApi.UI.showToast('Kopiert!', { type: 'success' }); } catch(e) {}
             this._closePicker();
             return;
         }
-        if (this._inEditor && this._savedRange) {
-            try {
-                var tb = document.querySelector('[role="textbox"][data-slate-editor="true"]') || document.querySelector('[role="textbox"]');
-                if (tb) { tb.focus(); }
-                var sel = window.getSelection();
-                if (sel) { sel.removeAllRanges(); sel.addRange(this._savedRange); }
-                var ok = document.execCommand('insertText', false, formatted);
-                if (ok) {
-                    BdApi.UI.showToast('Formatierung eingefuegt!', { type: 'success' });
-                    this._closePicker();
-                    return;
-                }
-            } catch(e) {}
+        var inserted = this._insertViaDispatch(formatted);
+        if (inserted) {
+            try { BdApi.UI.showToast('Eingef\u00fcgt!', { type: 'success' }); } catch(e) {}
+            this._closePicker();
+            return;
         }
         this._clip(formatted);
-        BdApi.UI.showToast('Kopiert! Einfuegen mit Strg+V', { type: 'info' });
+        try { BdApi.UI.showToast('Kopiert! Einf\u00fcgen mit Strg+V', { type: 'info' }); } catch(e) {}
         this._closePicker();
     }
+
     getSettingsPanel() {
+        var self = this;
         var el = document.createElement('div');
-        el.style.cssText = 'padding:16px;color:#dcddde;font-size:14px;';
-        var box = document.createElement('div');
-        box.style.cssText = 'background:#1e1f22;border-radius:8px;padding:16px;line-height:1.9;';
-        var b = document.createElement('b');
-        b.style.color = '#f2f3f5';
-        b.textContent = 'Anleitung:';
-        box.appendChild(b);
-        var br = document.createElement('br');
-        box.appendChild(br);
-        var steps = [
-            '1.  Text in Discord markieren (Nachricht oder Chat-Eingabe)',
-            '2.  Farb-Icon das erscheint anklicken',
-            '3.  Farbe und Format auswaehlen',
-            '4.  Auf Einfuegen oder Kopieren klicken'
-        ];
-        steps.forEach(function(s) {
-            var span = document.createElement('span');
-            span.textContent = s;
-            box.appendChild(span);
-            box.appendChild(document.createElement('br'));
-        });
-        el.appendChild(box);
+        el.style.cssText = 'padding:16px;color:#dcddde;font-size:14px;font-family:var(--font-primary,sans-serif);';
+
+        var t1 = document.createElement('div');
+        t1.style.cssText = 'font-weight:700;font-size:15px;color:#f2f3f5;margin-bottom:10px;';
+        t1.textContent = 'Farbe & Format';
+        el.appendChild(t1);
+
+        var info1 = document.createElement('div');
+        info1.style.cssText = 'background:#1e1f22;border-radius:8px;padding:12px;line-height:1.8;margin-bottom:16px;color:#b5bac1;';
+        info1.textContent = 'Text markieren \u2192 Farb-Icon klicken \u2192 Farbe/Format w\u00e4hlen \u2192 Einf\u00fcgen oder Kopieren.';
+        el.appendChild(info1);
+
+        var t2 = document.createElement('div');
+        t2.style.cssText = 'font-weight:700;font-size:15px;color:#f2f3f5;margin-bottom:10px;';
+        t2.textContent = 'Nachrichten verstecken';
+        el.appendChild(t2);
+
+        var info2 = document.createElement('div');
+        info2.style.cssText = 'background:#1e1f22;border-radius:8px;padding:12px;line-height:1.8;margin-bottom:12px;color:#b5bac1;';
+        info2.textContent = 'Maus \u00fcber eine Nachricht \u2192 \uD83D\uDEAB-Button klicken. Unten rechts erscheint ein Button um versteckte Nachrichten wieder anzuzeigen.';
+        el.appendChild(info2);
+
+        var count = document.createElement('div');
+        count.style.cssText = 'margin-bottom:12px;color:#b5bac1;font-size:13px;';
+        count.textContent = 'Aktuell ' + self._hidden.size + ' Nachricht' + (self._hidden.size === 1 ? '' : 'en') + ' versteckt.';
+        el.appendChild(count);
+
+        var resetBtn = document.createElement('button');
+        resetBtn.style.cssText = 'padding:10px 18px;border:none;border-radius:6px;background:#ed4245;color:#fff;font-weight:700;cursor:pointer;font-size:14px;';
+        resetBtn.textContent = 'Alle Nachrichten einblenden';
+        resetBtn.onclick = function() {
+            self._hidden.clear();
+            self._saveHidden();
+            document.querySelectorAll('[data-gc-hidden="1"]').forEach(function(e) { e.removeAttribute('data-gc-hidden'); });
+            self._updateToggleBar();
+            count.textContent = 'Aktuell 0 Nachrichten versteckt.';
+        };
+        el.appendChild(resetBtn);
         return el;
     }
 }
